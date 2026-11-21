@@ -16,17 +16,11 @@ data/exports/
 *.p12
 *.pfx
 
-# Source directories excluded per request
-api/
-ai/
-backend/
-backend_platform/
+# Application source is tracked so the FastAPI app can deploy from Git.
+# Secrets, local databases and deployment-only infra stay ignored.
 
 # Individual files excluded per request
 data/jwt_secret
-config/settings.py
-core/security.py
-database/mongodb.py
 docker-compose.yml
 
 # Python
