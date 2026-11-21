@@ -1,0 +1,186 @@
+name: smartraderai
+
+x-core-env: &core-env
+  PYTHONUNBUFFERED: "1"
+  MARKET_REFRESH_SECONDS: "${MARKET_REFRESH_SECONDS:-15}"
+  DATABASE_URL: "${DATABASE_URL:-}"
+  MONGO_URI: "${MONGO_URI:-}"
+  REDIS_URL: "${REDIS_URL:-}"
+  EVENT_BUS: "${EVENT_BUS:-memory}"
+  KAFKA_BOOTSTRAP_SERVERS: "${KAFKA_BOOTSTRAP_SERVERS:-}"
+  KAFKA_TOPIC: "${KAFKA_TOPIC:-smartraderai.market}"
+  CLOUD_STORAGE: "${CLOUD_STORAGE:-local}"
+  OAUTH_CLIENT_ID: "${OAUTH_CLIENT_ID:-smartraderai}"
+  OAUTH_CLIENT_SECRET: "${OAUTH_CLIENT_SECRET:-}"
+  NODE_GATEWAY_URL: "${NODE_GATEWAY_URL:-}"
+  SPRING_STREAM_URL: "${SPRING_STREAM_URL:-}"
+  DJANGO_ADMIN_URL: "${DJANGO_ADMIN_URL:-}"
+
+services:
+  core:
+    build: .
+    container_name: smartraderai-core
+    restart: unless-stopped
+    env_file:
+      - path: .env
+        required: false
+    environment:
+      <<: *core-env
+    ports:
+      - "8000:8000"
+    volumes:
+      - core-data:/app/data
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/health', timeout=3)"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 30s
+
+  redis:
+    image: redis:7-alpine
+    container_name: smartraderai-redis
+    profiles: ["infra", "cache", "stream"]
+    restart: unless-stopped
+    command: ["redis-server", "--appendonly", "yes"]
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis-data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+
+  postgres:
+    image: postgres:16-alpine
+    container_name: smartraderai-postgres
+    profiles: ["infra", "sql", "postgres"]
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: smartraderai
+      POSTGRES_USER: smartraderai
+      POSTGRES_PASSWORD: "${POSTGRES_PASSWORD:-smartraderai}"
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U smartraderai -d smartraderai"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  mysql:
+    image: mysql:8.0
+    container_name: smartraderai-mysql
+    profiles: ["infra", "sql", "mysql"]
+    restart: unless-stopped
+    environment:
+      MYSQL_DATABASE: smartraderai
+      MYSQL_USER: smartraderai
+      MYSQL_PASSWORD: "${MYSQL_PASSWORD:-smartraderai}"
+      MYSQL_ROOT_PASSWORD: "${MYSQL_ROOT_PASSWORD:-smartraderai-root}"
+    ports:
+      - "3306:3306"
+    volumes:
+      - mysql-data:/var/lib/mysql
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "127.0.0.1", "-usmartraderai", "-p${MYSQL_PASSWORD:-smartraderai}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  mongodb:
+    image: mongo:7
+    container_name: smartraderai-mongodb
+    profiles: ["infra", "mongo"]
+    restart: unless-stopped
+    environment:
+      MONGO_INITDB_DATABASE: smartraderai
+    ports:
+      - "27017:27017"
+    volumes:
+      - mongo-data:/data/db
+    healthcheck:
+      test: ["CMD", "mongosh", "--quiet", "--eval", "db.adminCommand('ping').ok"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+
+  kafka:
+    image: bitnami/kafka:3.7.1
+    container_name: smartraderai-kafka
+    profiles: ["infra", "stream", "kafka"]
+    restart: unless-stopped
+    environment:
+      ALLOW_PLAINTEXT_LISTENER: "yes"
+      KAFKA_CFG_NODE_ID: "1"
+      KAFKA_CFG_PROCESS_ROLES: "controller,broker"
+      KAFKA_CFG_CONTROLLER_QUORUM_VOTERS: "1@kafka:9093"
+      KAFKA_CFG_LISTENERS: "PLAINTEXT://:9092,CONTROLLER://:9093"
+      KAFKA_CFG_ADVERTISED_LISTENERS: "PLAINTEXT://kafka:9092"
+      KAFKA_CFG_LISTENER_SECURITY_PROTOCOL_MAP: "CONTROLLER:PLAINTEXT,PLAINTEXT:PLAINTEXT"
+      KAFKA_CFG_CONTROLLER_LISTENER_NAMES: "CONTROLLER"
+      KAFKA_CFG_INTER_BROKER_LISTENER_NAME: "PLAINTEXT"
+      KAFKA_CFG_AUTO_CREATE_TOPICS_ENABLE: "true"
+    ports:
+      - "9092:9092"
+    volumes:
+      - kafka-data:/bitnami/kafka
+
+  gateway-node:
+    build: ./services/gateway-node
+    container_name: smartraderai-node-gateway
+    profiles: ["sidecars", "gateway"]
+    restart: unless-stopped
+    environment:
+      PORT: "3000"
+      CORE_API_URL: "http://core:8000"
+    ports:
+      - "3000:3000"
+
+  admin-django:
+    build: ./services/admin-django
+    container_name: smartraderai-django-admin
+    profiles: ["sidecars", "admin"]
+    restart: unless-stopped
+    environment:
+      DJANGO_SECRET_KEY: "${DJANGO_SECRET_KEY:-dev-only-change-me}"
+      DJANGO_ALLOWED_HOSTS: "*"
+    ports:
+      - "8001:8001"
+
+  stream-java:
+    build: ./services/stream-java
+    container_name: smartraderai-spring-stream
+    profiles: ["sidecars", "stream", "java"]
+    restart: unless-stopped
+    environment:
+      SERVER_PORT: "8080"
+      KAFKA_BOOTSTRAP_SERVERS: "${KAFKA_BOOTSTRAP_SERVERS:-kafka:9092}"
+      KAFKA_TOPIC: "${KAFKA_TOPIC:-smartraderai.market}"
+      KAFKA_ENABLED: "${KAFKA_ENABLED:-false}"
+      REDIS_HOST: "redis"
+      REDIS_PORT: "6379"
+    ports:
+      - "8080:8080"
+
+  nginx:
+    image: nginx:1.27-alpine
+    container_name: smartraderai-nginx
+    profiles: ["edge"]
+    restart: unless-stopped
+    ports:
+      - "80:80"
+    volumes:
+      - ./deploy/nginx.conf:/etc/nginx/conf.d/default.conf:ro
+
+volumes:
+  core-data:
+  redis-data:
+  postgres-data:
+  mysql-data:
+  mongo-data:
+  kafka-data:

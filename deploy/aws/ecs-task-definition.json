@@ -1,0 +1,42 @@
+{
+  "family": "smartraderai",
+  "executionRoleArn": "arn:aws:iam::ACCOUNT_ID:role/ecsTaskExecutionRole",
+  "taskRoleArn": "arn:aws:iam::ACCOUNT_ID:role/smartraderaiTaskRole",
+  "networkMode": "awsvpc",
+  "requiresCompatibilities": ["FARGATE"],
+  "cpu": "512",
+  "memory": "1024",
+  "containerDefinitions": [
+    {
+      "name": "core",
+      "image": "ACCOUNT_ID.dkr.ecr.REGION.amazonaws.com/smartraderai:latest",
+      "essential": true,
+      "portMappings": [
+        {
+          "containerPort": 8000,
+          "protocol": "tcp"
+        }
+      ],
+      "environment": [
+        { "name": "APP_NAME", "value": "SmarTraderAI" },
+        { "name": "MARKET_REFRESH_SECONDS", "value": "15" },
+        { "name": "EVENT_BUS", "value": "memory" },
+        { "name": "CLOUD_STORAGE", "value": "s3" }
+      ],
+      "secrets": [
+        {
+          "name": "JWT_SECRET",
+          "valueFrom": "arn:aws:secretsmanager:REGION:ACCOUNT_ID:secret:smartraderai/jwt-secret"
+        }
+      ],
+      "logConfiguration": {
+        "logDriver": "awslogs",
+        "options": {
+          "awslogs-group": "/ecs/smartraderai",
+          "awslogs-region": "REGION",
+          "awslogs-stream-prefix": "core"
+        }
+      }
+    }
+  ]
+}

@@ -1,0 +1,67 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>SmarTraderAI</title>
+  <link rel="stylesheet" href="/static/css/style.css?v=proup-1" />
+</head>
+<body>
+  <div class="app">
+    <aside class="sidebar" id="sidebar">
+      <div class="brand">
+        <div class="brand-main">
+          <div class="brand-cube">S</div>
+          <img class="brand-logo" src="/static/assets/smartraderai-logo.png?v=exact-1" alt="SmarTraderAI" />
+        </div>
+        <div class="brand-sub">PRO TERMINAL</div>
+      </div>
+
+      <div class="nav-label">WORKSPACE</div>
+      <nav class="nav" id="nav">
+        <button class="nav-item active" data-view="overview"><span class="ico">▦</span>Overview</button>
+        <button class="nav-item" data-view="markets"><span class="ico">⌁</span>Markets</button>
+        <button class="nav-item" data-view="signals"><span class="ico">◎</span>Signals<span class="nav-badge" id="navSignals">0</span></button>
+        <button class="nav-item" data-view="positions"><span class="ico">▤</span>Positions</button>
+        <button class="nav-item" data-view="strategies"><span class="ico">⚙</span>Strategies</button>
+      </nav>
+
+      <div class="nav-label">INTELLIGENCE</div>
+      <nav class="nav">
+        <button class="nav-item" data-view="ai"><span class="ico">✦</span>AI Insights</button>
+        <button class="nav-item" data-view="alerts"><span class="ico">◔</span>Alerts<span class="nav-badge warn" id="navAlerts">0</span></button>
+        <button class="nav-item" data-view="tradingview"><span class="ico">▥</span>TradingView</button>
+        <button class="nav-item" data-view="settings"><span class="ico">⋮</span>Settings</button>
+      </nav>
+
+      <div class="sidebar-foot">
+        <div class="status-dot"></div>
+        <div><strong>Yahoo Finance</strong><small>Live/delayed feed · NSE</small></div>
+      </div>
+    </aside>
+
+    <main class="main">
+      <header class="topbar">
+        <div class="top-left">
+          <button class="menu-btn" id="menuBtn">☰</button>
+          <div><h1 id="pageTitle">Overview</h1><p id="pageSub">Your trading command center</p></div>
+        </div>
+        <div class="top-actions">
+          <div class="search"><span>⌕</span><input id="globalSearch" placeholder="Search symbol (e.g. RELIANCE)" /></div>
+          <div class="live-pill" id="livePill"><i></i><span>CONNECTING</span></div>
+          <div class="clock" id="clock">--:--:--</div>
+          <button class="btn primary" id="scanBtn">⟳ Run Scan</button>
+          <div class="user-box"><div class="avatar" id="avatar">--</div><button class="btn" id="logoutBtn" title="Log out">⇥</button></div>
+        </div>
+      </header>
+
+      <div class="view" id="view">
+        <div class="loading">Loading dashboard…</div>
+      </div>
+    </main>
+  </div>
+
+  <div class="toast" id="toast"></div>
+  <script src="/static/js/app.js"></script>
+</body>
+</html>

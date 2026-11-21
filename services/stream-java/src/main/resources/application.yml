@@ -1,0 +1,30 @@
+server:
+  port: ${SERVER_PORT:8080}
+
+spring:
+  application:
+    name: smartraderai-stream-service
+  kafka:
+    bootstrap-servers: ${KAFKA_BOOTSTRAP_SERVERS:localhost:9092}
+    listener:
+      auto-startup: ${KAFKA_ENABLED:false}
+    consumer:
+      group-id: ${KAFKA_GROUP_ID:smartraderai-java}
+      auto-offset-reset: latest
+      key-deserializer: org.apache.kafka.common.serialization.StringDeserializer
+      value-deserializer: org.apache.kafka.common.serialization.StringDeserializer
+  data:
+    redis:
+      host: ${REDIS_HOST:localhost}
+      port: ${REDIS_PORT:6379}
+
+smartraderai:
+  kafka:
+    enabled: ${KAFKA_ENABLED:false}
+    topic: ${KAFKA_TOPIC:smartraderai.market}
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info

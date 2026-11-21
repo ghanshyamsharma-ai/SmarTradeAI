@@ -1,0 +1,13 @@
+.git
+.gitignore
+.venv
+__pycache__
+*.py[cod]
+.env
+data/*.db
+data/.jwt_secret
+data/exports/
+logs/
+*.log
+.pytest_cache
+.DS_Store

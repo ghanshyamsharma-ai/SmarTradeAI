@@ -1,0 +1,25 @@
+fastapi
+uvicorn
+motor
+pymongo
+pydantic
+pydantic-settings
+email-validator
+python-dotenv
+httpx
+numpy
+scikit-learn
+kiteconnect
+openai
+
+# Optional production platform adapters (all lazy-loaded; app works without them)
+redis
+aiokafka
+sqlalchemy
+asyncpg
+aiomysql
+aiosqlite
+boto3
+azure-storage-blob
+python-multipart
+pytest

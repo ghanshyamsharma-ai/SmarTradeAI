@@ -1,0 +1,43 @@
+# Secrets and local environment
+.env
+.env.*
+*.env
+.env.example
+
+# Databases, local secrets and generated exports
+*.db
+*.sqlite
+*.sqlite3
+data/app.db
+data/.jwt_secret
+data/exports/
+*.pem
+*.key
+*.p12
+*.pfx
+
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+.pytest_cache/
+.mypy_cache/
+.coverage
+coverage.xml
+
+# Logs and temp files
+logs/
+*.log
+_*.py
+*_out.txt
+_srv*_*.txt
+.DS_Store
+Thumbs.db
+
+# Node and build output
+node_modules/
+dist/
+build/
+
+# Editors
+.idea/

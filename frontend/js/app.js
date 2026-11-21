@@ -1,0 +1,595 @@
+/* SmarTraderAI — live terminal client */
+
+const TOKEN = localStorage.getItem('stai_token') || localStorage.getItem('ssai_token') || localStorage.getItem('stap_token');
+if (!TOKEN) location.replace('/login');
+const USER = JSON.parse(localStorage.getItem('stai_user') || localStorage.getItem('ssai_user') || localStorage.getItem('stap_user') || '{}');
+
+const state = {
+  view: 'overview', symbol: 'RELIANCE', interval: '5m', signalFilter: 'ALL',
+  tvSymbol: 'RELIANCE.NS', tvInterval: '15',
+  dashboard: null, quote: null, candles: null, analysis: null, model: null,
+  watchlist: [], indices: [], symbols: [], signals: [], positions: null,
+  trades: null, strategies: [], alerts: null, settings: null, catalog: null, connected: false
+};
+
+const $ = (s) => document.querySelector(s);
+const fmt = (n) => Number(n || 0).toLocaleString('en-IN', { maximumFractionDigits: 2 });
+const money = (n) => '₹' + fmt(n);
+const signCls = (v) => Number(v) >= 0 ? 'pos' : 'neg';
+const signStr = (v) => (Number(v) >= 0 ? '+' : '') + fmt(v);
+const esc = (s) => String(s ?? '').replace(/[&<>]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;' }[c]));
+
+async function api(path, options = {}) {
+  const res = await fetch(path, {
+    ...options,
+    headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${TOKEN}`, ...(options.headers || {}) }
+  });
+  if (res.status === 401) { localStorage.clear(); location.href = '/login'; throw new Error('Session expired'); }
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) throw new Error(data.detail || `Request failed (${res.status})`);
+  return data;
+}
+
+function toast(msg) {
+  const el = $('#toast'); el.textContent = msg; el.classList.add('show');
+  clearTimeout(toast._t); toast._t = setTimeout(() => el.classList.remove('show'), 2800);
+}
+
+/* ---------------- SVG charts ---------------- */
+function lineChart(data, { height = 220, color = '#818cf8' } = {}) {
+  if (!data || !data.length) return '<div class="empty">No data</div>';
+  const W = 760, H = height, P = { l: 8, r: 62, t: 12, b: 26 };
+  const vals = data.map(d => d.v), min = Math.min(...vals), max = Math.max(...vals), span = (max - min) || 1;
+  const x = i => P.l + i * (W - P.l - P.r) / Math.max(1, data.length - 1);
+  const y = v => P.t + (1 - (v - min) / span) * (H - P.t - P.b);
+  const pts = data.map((d, i) => `${x(i).toFixed(1)},${y(d.v).toFixed(1)}`).join(' ');
+  const area = `${P.l},${H - P.b} ${pts} ${x(data.length - 1)},${H - P.b}`;
+  let grid = '';
+  for (let i = 0; i <= 4; i++) {
+    const gy = P.t + i * (H - P.t - P.b) / 4;
+    grid += `<line x1="${P.l}" y1="${gy}" x2="${W - P.r}" y2="${gy}" stroke="#222c42"/>
+      <text x="${W - P.r + 8}" y="${gy + 4}" fill="#6f7b92" font-size="10">${fmt((max - i * span / 4) / 1000)}k</text>`;
+  }
+  return `<div class="chart-wrap"><svg viewBox="0 0 ${W} ${H}"><defs>
+    <linearGradient id="eq" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stop-color="${color}" stop-opacity=".35"/>
+    <stop offset="100%" stop-color="${color}" stop-opacity="0"/></linearGradient></defs>${grid}
+    <polygon points="${area}" fill="url(#eq)"/><polyline points="${pts}" fill="none" stroke="${color}" stroke-width="2"/>
+    <circle cx="${x(data.length - 1)}" cy="${y(vals[vals.length - 1])}" r="4" fill="${color}"/></svg></div>`;
+}
+
+function candleChart(candles, ind) {
+  if (!candles || !candles.length) return '<div class="empty">No candle data</div>';
+  const W = 900, H = 350, P = { l: 10, r: 64, t: 14, b: 44 };
+  const volH = 58, priceH = H - P.t - P.b - volH - 12;
+  const min = Math.min(...candles.map(c => c.l)), max = Math.max(...candles.map(c => c.h)), span = (max - min) || 1;
+  const y = v => P.t + (1 - (v - min) / span) * priceH;
+  const slot = (W - P.l - P.r) / candles.length, bw = Math.max(2, slot * 0.58);
+  const maxVol = Math.max(...candles.map(c => c.v));
+  let bars = '';
+  candles.forEach((c, i) => {
+    const cx = P.l + slot * i + slot / 2, col = c.c >= c.o ? '#22c55e' : '#ef4444';
+    bars += `<line x1="${cx}" y1="${y(c.h)}" x2="${cx}" y2="${y(c.l)}" stroke="${col}"/>`;
+    bars += `<rect x="${cx - bw / 2}" y="${y(Math.max(c.o, c.c))}" width="${bw}" height="${Math.max(1, y(Math.min(c.o, c.c)) - y(Math.max(c.o, c.c)))}" fill="${col}" rx="1"/>`;
+    const vh = c.v / (maxVol || 1) * volH;
+    bars += `<rect x="${cx - bw / 2}" y="${H - P.b - vh}" width="${bw}" height="${vh}" fill="${col}" opacity=".35"/>`;
+  });
+  const overlay = (key, color) => {
+    if (!ind || !ind[key]) return '';
+    const pts = [];
+    ind[key].forEach((v, i) => { if (v != null) pts.push(`${(P.l + slot * i + slot / 2).toFixed(1)},${y(v).toFixed(1)}`); });
+    return pts.length > 1 ? `<polyline points="${pts.join(' ')}" fill="none" stroke="${color}" stroke-width="1.5"/>` : '';
+  };
+  let grid = '';
+  for (let i = 0; i <= 4; i++) {
+    const gy = P.t + i * priceH / 4;
+    grid += `<line x1="${P.l}" y1="${gy}" x2="${W - P.r}" y2="${gy}" stroke="#222c42"/>
+      <text x="${W - P.r + 8}" y="${gy + 4}" fill="#6f7b92" font-size="10">${fmt(max - i * span / 4)}</text>`;
+  }
+  return `<div class="chart-wrap"><svg viewBox="0 0 ${W} ${H}">${grid}
+    ${overlay('ema20', '#38bdf8')}${overlay('ema50', '#f59e0b')}${overlay('bb_upper', '#6366f188')}${overlay('bb_lower', '#6366f188')}
+    ${bars}</svg></div><div class="legend"><span><i style="background:#38bdf8"></i>EMA 20</span>
+    <span><i style="background:#f59e0b"></i>EMA 50</span><span><i style="background:#6366f1"></i>Bollinger</span>
+    <span><i style="background:#22c55e"></i>Bullish</span><span><i style="background:#ef4444"></i>Bearish</span></div>`;
+}
+
+function spark(vals, color = '#818cf8') {
+  if (!vals || vals.length < 2) return '';
+  const min = Math.min(...vals), max = Math.max(...vals), span = (max - min) || 1;
+  return `<svg viewBox="0 0 100 28" style="width:100px;height:28px"><polyline points="${vals.map((v, i) => `${i * 100 / (vals.length - 1)},${26 - (v - min) / span * 22}`).join(' ')}" fill="none" stroke="${color}" stroke-width="1.8"/></svg>`;
+}
+
+function breadthBar(b) {
+  const total = b.advances + b.declines + b.unchanged || 1;
+  return `<div style="display:flex;height:10px;border-radius:8px;overflow:hidden;background:#222c42">
+    <i style="width:${b.advances / total * 100}%;background:#22c55e"></i>
+    <i style="width:${b.unchanged / total * 100}%;background:#64748b"></i>
+    <i style="width:${b.declines / total * 100}%;background:#ef4444"></i></div>
+    <div class="legend"><span class="pos">▲ ${b.advances} advances</span><span>${b.unchanged} unchanged</span><span class="neg">▼ ${b.declines} declines</span></div>`;
+}
+
+/* ---------------- TradingView ---------------- */
+function tvSymbol(symbol) {
+  const s = String(symbol || '').trim().toUpperCase();
+  if (s === '^NSEI') return 'NSE:NIFTY50';
+  if (s === '^NSEBANK') return 'NSE:BANKNIFTY';
+  if (s === '^BSESN') return 'BSE:SENSEX';
+  if (s.endsWith('.NS')) return 'NSE:' + s.slice(0, -3);
+  if (s.endsWith('.BO')) return 'BSE:' + s.slice(0, -3);
+  if (s.startsWith('^')) return 'BSE:' + s.slice(1);
+  return 'NSE:' + s;
+}
+
+function tvInterval(interval) {
+  return ({ '1m': '1', '2m': '2', '5m': '5', '15m': '15', '30m': '30', '1h': '60', '60m': '60', '1d': 'D', '1wk': 'W' })[interval] || '15';
+}
+
+function mountTradingView() {
+  const host = $('#tvChart');
+  if (!host) return;
+  document.querySelectorAll('script[data-tv-widget]').forEach(s => s.remove());
+  host.innerHTML = '<div class="tradingview-widget-container__widget"></div>';
+  const script = document.createElement('script');
+  script.dataset.tvWidget = '1';
+  script.type = 'text/javascript';
+  script.async = true;
+  script.src = 'https://s3.tradingview.com/external-embedding/embed-widget-advanced-chart.js';
+  script.innerHTML = JSON.stringify({
+    autosize: true,
+    symbol: tvSymbol(state.tvSymbol),
+    interval: tvInterval(state.tvInterval),
+    timezone: 'Asia/Kolkata',
+    theme: 'dark',
+    style: '1',
+    locale: 'en',
+    backgroundColor: '#111726',
+    gridColor: '#222c42',
+    hide_top_toolbar: false,
+    hide_legend: false,
+    allow_symbol_change: true,
+    save_image: false,
+    calendar: false,
+    support_host: 'https://www.tradingview.com'
+  });
+  script.onerror = () => {
+    host.innerHTML = '<div class="empty">Could not load TradingView. Allow scripts from s3.tradingview.com and retry.</div>';
+  };
+  host.appendChild(script);
+}
+
+function setTvFullscreen(active) {
+  const wrap = $('#tvFullWrap');
+  const btn = $('#tvFullBtn');
+  document.body.classList.toggle('tv-focus', active);
+  if (wrap) wrap.classList.toggle('is-fullscreen', active);
+  if (btn) {
+    btn.textContent = active ? '✕ Exit Fullscreen' : '⛶ Fullscreen';
+    btn.title = active ? 'Exit fullscreen (Esc)' : 'Expand chart to fullscreen';
+    // Keep keyboard events in the parent document so Escape works even when
+    // the cross-origin TradingView iframe had focus before entering fullscreen.
+    if (active) btn.focus();
+  }
+  if (state.view === 'tradingview') setTimeout(mountTradingView, 120);
+}
+
+function toggleTvFullscreen() {
+  setTvFullscreen(!document.body.classList.contains('tv-focus'));
+}
+
+document.addEventListener('keydown', (e) => {
+  if (e.key === 'Escape' && document.body.classList.contains('tv-focus')) {
+    setTvFullscreen(false);
+  }
+});
+
+/* ---------------- Views ---------------- */
+function kpi(label, value, foot, tone = '') {
+  return `<div class="card kpi"><div class="kpi-label">${label}</div>
+    <div class="kpi-value ${tone}">${value}</div><div class="kpi-foot">${foot}</div></div>`;
+}
+
+function renderOverview() {
+  const d = state.dashboard; if (!d) return '<div class="loading">Loading…</div>';
+  const idx = d.indices || [], b = d.breadth;
+  return `<div class="grid g3" style="margin-bottom:16px">
+      ${idx.slice(0, 3).map(q => kpi(q.symbol, money(q.price),
+        `<span class="${signCls(q.change_pct)}">${signStr(q.change_pct)}%</span> · ${esc(q.exchange)}`, signCls(q.change_pct))).join('')}
+    </div>
+    <div class="grid g2" style="margin-bottom:16px">
+      <div class="card"><div class="section-title">Market Breadth <small>${d.stats.watchlist_size} watchlist symbols</small></div>
+        ${breadthBar(b)}<p class="note" style="margin-top:14px">Average move <strong class="${signCls(b.average_change)}">${signStr(b.average_change)}%</strong>
+        · Model out-of-sample accuracy <strong>${d.stats.model_accuracy ?? '—'}%</strong>
+        · Last scan ${esc(d.stats.last_scan || 'pending')}</p></div>
+      <div class="card"><div class="section-title">Top Movers <small>Live Yahoo data</small></div>
+        <div class="tbl-scroll"><table><thead><tr><th>Symbol</th><th>Price</th><th>Change</th></tr></thead><tbody>
+        ${d.top_movers.map(q => `<tr><td><div class="sym">${q.symbol}</div><div class="sub">${esc(q.name)}</div></td>
+          <td>${money(q.price)}</td><td class="${signCls(q.change_pct)}">${signStr(q.change_pct)}%</td></tr>`).join('')}
+        </tbody></table></div></div>
+    </div>
+    <div class="grid g2">
+      <div class="card"><div class="section-title">Gainers & Losers</div>
+        <div class="tbl-scroll"><table><thead><tr><th>Gainers</th><th>%</th><th>Losers</th><th>%</th></tr></thead><tbody>
+        ${d.gainers.map((g, i) => `<tr><td class="sym">${g.symbol}</td><td class="pos">${signStr(g.change_pct)}%</td>
+          <td class="sym">${d.losers[i]?.symbol || ''}</td><td class="neg">${signStr(d.losers[i]?.change_pct || 0)}%</td></tr>`).join('')}
+        </tbody></table></div></div>
+      <div class="card"><div class="section-title">Latest ML Signals <small><button class="btn" data-go="signals">View all</button></small></div>
+        ${d.signals.length ? d.signals.map(sigRow).join('') : '<div class="empty">No signals yet — run a scan.</div>'}</div>
+    </div>`;
+}
+
+function sigRow(s) {
+  return `<div class="signal-row"><div class="side-tag ${s.side === 'BUY' ? 'buy' : 'sell'}">${s.side}</div>
+    <div style="flex:1;min-width:0"><div class="sym">${s.symbol} <span class="sub">${esc(s.strategy)}</span></div>
+    <div class="sub">Entry ${money(s.entry)} · Target ${money(s.target)} · SL ${money(s.stoploss)} · ML ${s.ml_bias} ${s.ml_probability_up}↑/${s.ml_probability_down}↓</div></div>
+    <div style="text-align:right"><strong>${s.confidence}%</strong><div class="meter"><i style="width:${s.confidence}%"></i></div></div></div>`;
+}
+
+function catalogGroups() {
+  const cat = state.catalog || {};
+  return [
+    ['INDICES · NIFTY 50 / NIFTY BANK / SENSEX', cat.indices || []],
+    ['NSE BANKS', cat.banks || []],
+    ['NSE COMPANIES', cat.nse_companies || []],
+    ['BSE COMPANIES', cat.bse_companies || []]
+  ];
+}
+
+function catalogSymbolSet() {
+  return new Set(catalogGroups().flatMap(([, items]) => items.map(x => x.symbol)));
+}
+
+function symbolOptions() {
+  const list = state.watchlist.length ? state.watchlist.map(q => q.symbol) : (state.symbols || []);
+  return [...new Set([...catalogSymbolSet(), ...list, state.symbol])];
+}
+
+function catalogOptions(selected) {
+  const known = catalogSymbolSet();
+  const extras = [...new Set([...symbolOptions(), selected])].filter(s => !known.has(s));
+  const extraOptions = extras.length
+    ? `<optgroup label="WATCHLIST / OTHER">${extras.map(s => `<option value="${esc(s)}" ${s === selected ? 'selected' : ''}>${esc(s)}</option>`).join('')}</optgroup>` : '';
+  return extraOptions + catalogGroups().map(([label, items]) =>
+    `<optgroup label="${esc(label)}">${items.map(x =>
+      `<option value="${esc(x.symbol)}" ${x.symbol === selected ? 'selected' : ''}>${esc(x.name)} · ${esc(x.exchange)}</option>`
+    ).join('')}</optgroup>`).join('');
+}
+
+function catalogChips(selected, attr, quoteMap = {}) {
+  return catalogGroups().map(([label, items]) => `<div class="tv-group">
+    <div class="tv-group-label">${esc(label)} <span>${items.length}</span></div>
+    <div class="tv-chips">${items.map(x => {
+      const q = quoteMap[x.symbol];
+      return `<button class="tv-chip ${x.symbol === selected ? 'active' : ''}" ${attr}="${esc(x.symbol)}">${esc(x.name)}<span class="${q ? signCls(q.change_pct) : ''}">${q ? signStr(q.change_pct) + '%' : esc(x.exchange)}</span></button>`;
+    }).join('')}</div></div>`).join('');
+}
+
+function tvForSymbol(symbol) {
+  for (const [, items] of catalogGroups()) {
+    const hit = items.find(x => x.symbol === symbol);
+    if (hit) return hit.tv_symbol || tvSymbol(symbol);
+  }
+  return tvSymbol(symbol);
+}
+
+function renderMarkets() {
+  const q = state.quote, c = state.candles, a = state.analysis, cat = state.catalog || {};
+  if (!q || !c) return '<div class="loading">Loading market data…</div>';
+  const quoteMap = Object.fromEntries([...(state.indices || []), ...(state.watchlist || [])].map(x => [x.symbol, x]));
+  return `<div class="input-row" style="max-width:820px;flex-wrap:wrap">
+      <select id="mktSymbol">${catalogOptions(state.symbol)}</select>
+      <select id="mktInterval">${['1m','5m','15m','30m','1h','1d'].map(i => `<option ${i === state.interval ? 'selected' : ''}>${i}</option>`).join('')}</select>
+      <button class="btn primary" id="mktLoad">Load Chart</button>
+      <a class="btn" href="https://www.tradingview.com/chart/?symbol=${encodeURIComponent(tvForSymbol(state.symbol))}" target="_blank" rel="noopener">TradingView ↗</a>
+      <span class="note">${esc(q.exchange)} · ${esc(q.currency)} · ${esc(q.delay_note || '')}</span>
+    </div>
+    <div class="grid g4" style="margin-bottom:16px">
+      ${kpi(q.symbol + ' · LTP', money(q.price), `<span class="${signCls(q.change_pct)}">${signStr(q.change_pct)}%</span>`, signCls(q.change))}
+      ${kpi('Day High', money(q.day_high), 'Live session')}
+      ${kpi('Day Low', money(q.day_low), 'Live session')}
+      ${kpi('Volume', fmt(q.volume), 'Cumulative')}
+    </div>
+    <div class="grid g2" style="margin-bottom:16px">
+      <div class="card"><div class="section-title">${q.symbol} · ${state.interval} <small>${esc(q.name)}</small></div>
+        ${candleChart(c.candles, c.indicators)}</div>
+      <div class="card ai-hero"><div class="section-title">ML Model Read <small>RandomForest</small></div>
+        <div class="bias ${a.bias === 'BULLISH' ? 'pos' : a.bias === 'BEARISH' ? 'neg' : ''}">${a.bias}</div>
+        <div class="sub" style="margin:8px 0">Direction confidence ${a.confidence}%</div>
+        <div class="meter" style="width:100%;margin-bottom:12px"><i style="width:${a.confidence}%"></i></div>
+        <div class="grid g3" style="gap:8px;margin-bottom:14px">
+          <div><div class="kpi-label">UP</div><strong class="pos">${a.probability_up}%</strong></div>
+          <div><div class="kpi-label">DOWN</div><strong class="neg">${a.probability_down}%</strong></div>
+          <div><div class="kpi-label">MODEL EDGE</div><strong class="${a.model.edge_over_baseline >= 0 ? 'pos' : 'neg'}">${a.model.edge_over_baseline >= 0 ? '+' : ''}${a.model.edge_over_baseline}%</strong></div>
+        </div>
+        <p style="font-size:12px;line-height:1.6;color:#c3ccdd">${esc(a.summary)}</p>
+        <div style="margin-top:10px">${a.key_points.map(p => `<div class="point">${esc(p)}</div>`).join('')}</div>
+      </div>
+    </div>
+    <div class="card" style="margin-top:16px"><div class="section-title">Symbol universe <small>${cat.total || 0} verified NSE/BSE symbols · click any symbol to open its live chart</small></div>
+      <input id="mktSearch" class="tv-search" placeholder="Filter symbols (e.g. BANK, RELIANCE, SENSEX)" />
+      ${catalogChips(state.symbol, 'data-mktsymbol', quoteMap)}
+      <p class="note" style="margin-top:14px">Clicking a symbol loads Yahoo OHLCV candles, indicators and the live ML read here. NSE uses <code>.NS</code>, BSE uses <code>.BO</code>, and indices use Yahoo index symbols. Yahoo quotes may be delayed ~15 minutes.</p>
+    </div>
+    <div class="card" style="margin-top:16px"><div class="section-title">Watchlist <small>${state.watchlist.length} symbols · live ticks</small></div>
+      <div class="tbl-scroll"><table><thead><tr><th>Symbol</th><th>Price</th><th>Change %</th><th>High</th><th>Low</th><th>Volume</th></tr></thead><tbody>
+      ${state.watchlist.map(x => `<tr style="cursor:pointer" data-symbol="${x.symbol}"><td><div class="sym">${x.symbol}</div><div class="sub">${esc(x.name)}</div></td>
+        <td>${money(x.price)}</td><td class="${signCls(x.change_pct)}">${signStr(x.change_pct)}%</td>
+        <td>${money(x.day_high)}</td><td>${money(x.day_low)}</td><td>${fmt(x.volume)}</td></tr>`).join('')}
+      </tbody></table></div></div>`;
+}
+
+function renderSignals() {
+  const list = state.signals.filter(s => state.signalFilter === 'ALL' || s.side === state.signalFilter);
+  return `<div class="card"><div class="section-title">ML-Filtered Trade Signals
+      <div><span class="chip indigo">${state.signals.length} ACTIVE</span>
+      <button class="btn" data-filter="ALL">All</button><button class="btn" data-filter="BUY">Buy</button>
+      <button class="btn" data-filter="SELL">Sell</button><button class="btn primary" id="scanBtn2">⟳ Rescan</button></div></div>
+    ${list.length ? list.map(sigRow).join('') : '<div class="empty">No signals. Run a scan against live data.</div>'}
+    <div class="note" style="margin-top:14px">Last scan: ${esc(state.dashboard?.stats?.last_scan || '—')} · Signals require technical setup + ML agreement.</div></div>`;
+}
+
+function renderPositions() {
+  const b = state.positions?.broker || {};
+  return `<div class="card"><div class="section-title">Broker Connection <small>${esc(b.broker || '')}</small></div>
+    <div class="grid g4" style="gap:10px;margin-bottom:14px">
+      <div class="kpi-label">Configured: <strong>${b.configured ? 'Yes' : 'No'}</strong></div>
+      <div class="kpi-label">Connected: <strong>${b.connected ? 'Yes' : 'No'}</strong></div>
+      <div class="kpi-label">Live orders: <strong>${b.trading_enabled ? 'Enabled' : 'Disabled'}</strong></div>
+      <div class="kpi-label">Mode: <strong>LIVE MARKET</strong></div>
+    </div>
+    <p class="note">${esc(b.message || '')}</p></div>
+    <div class="card" style="margin-top:16px"><div class="section-title">Positions</div>
+      <div class="empty">${state.positions?.positions?.length ? '' : 'No broker session connected — no holdings loaded.'}</div></div>
+    <div class="card" style="margin-top:16px"><div class="section-title">Trade History</div>
+      <div class="empty">${state.trades?.trades?.length ? '' : 'No broker session connected — no trades loaded.'}</div></div>`;
+}
+
+function renderStrategies() {
+  return `<div class="grid g3">${state.strategies.map(s => `<div class="card strategy-card">
+    <div style="display:flex;justify-content:space-between;align-items:flex-start">
+      <div><div class="sym">${esc(s.name)}</div><div class="sub">${esc(s.type)}</div></div>
+      <button class="switch ${s.enabled ? 'on' : ''}" data-toggle="${s.id}"></button></div>
+    <p class="sub" style="line-height:1.5">${esc(s.description)}</p>
+    <div style="display:flex;gap:8px;align-items:center"><span class="chip ${s.status === 'ACTIVE' ? 'green' : 'amber'}">${s.status}</span>
+      <span class="chip ${s.risk === 'LOW' ? 'green' : s.risk === 'HIGH' ? 'red' : 'amber'}">${s.risk} RISK</span></div>
+    </div>`).join('')}</div>`;
+}
+
+function renderAI() {
+  const a = state.analysis, m = state.model;
+  return `<div class="input-row" style="max-width:560px">
+      <select id="aiSymbol">${symbolOptions().map(s => `<option ${s === state.symbol ? 'selected' : ''}>${s}</option>`).join('')}</select>
+      <select id="aiInterval">${['1m','5m','15m','1h','1d'].map(i => `<option ${i === state.interval ? 'selected' : ''}>${i}</option>`).join('')}</select>
+      <button class="btn primary" id="aiRun">✦ Analyse</button></div>
+    ${a ? `<div class="grid g2"><div class="card ai-hero">
+      <div class="section-title">${esc(a.name)} <small>${a.symbol}</small></div>
+      <div class="bias ${a.bias === 'BULLISH' ? 'pos' : a.bias === 'BEARISH' ? 'neg' : ''}">${a.bias}</div>
+      <div class="sub" style="margin:8px 0">Confidence ${a.confidence}% · LTP ${money(a.price)} · ${signStr(a.change_pct)}%</div>
+      <div class="meter" style="width:100%;margin-bottom:16px"><i style="width:${a.confidence}%"></i></div>
+      <p style="line-height:1.7;color:#c3ccdd">${esc(a.summary)}</p>
+      <div style="margin-top:14px"><span class="chip indigo">KEY OBSERVATIONS</span>
+        ${a.key_points.map(p => `<div class="point">${esc(p)}</div>`).join('')}</div>
+      </div><div class="card"><div class="section-title">Action Plan</div>
+        <div class="chip green">SUGGESTION</div><p style="margin-top:12px;line-height:1.7;font-size:13px">${esc(a.suggestion)}</p>
+        <div style="margin-top:18px;border-top:1px solid var(--line);padding-top:14px">
+          <div class="kpi-label">Market time</div><p class="sub" style="margin-top:6px">${esc(a.market_time)}</p>
+          <div class="kpi-label" style="margin-top:12px">Source</div><p class="sub" style="margin-top:6px">${esc(a.source)}</p>
+        </div></div></div>
+      ${m ? `<div class="card" style="margin-top:16px"><div class="section-title">Model Performance <small>${esc(m.algorithm)}</small></div>
+        <div class="grid g4" style="gap:10px;margin-bottom:14px">
+          <div><div class="kpi-label">Out-of-sample accuracy</div><strong class="pos">${m.out_of_sample_accuracy}%</strong></div>
+          <div><div class="kpi-label">Baseline accuracy</div><strong>${m.baseline_accuracy}%</strong></div>
+          <div><div class="kpi-label">Edge over baseline</div><strong class="${m.edge_over_baseline >= 0 ? 'pos' : 'neg'}">${m.edge_over_baseline >= 0 ? '+' : ''}${m.edge_over_baseline}%</strong></div>
+          <div><div class="kpi-label">Macro precision</div><strong>${m.macro_precision}%</strong></div>
+        </div>
+        <div class="section-title">Feature Importance <small>${esc(m.label)}</small></div>
+        ${Object.entries(m.feature_importance).map(([k, v]) => `<div class="bar-row"><span>${esc(k)}</span>
+          <div class="bar-track"><i style="width:${(v * 100).toFixed(1)}%"></i></div><strong>${(v * 100).toFixed(1)}%</strong></div>`).join('')}
+        <p class="note" style="margin-top:14px">Trained ${esc(m.trained_at)} on ${m.symbols.length} live symbols with ${fmt(m.train_samples)} train / ${fmt(m.test_samples)} held-out samples. Model retrains every 15 minutes.</p>
+      </div>` : ''}` : '<div class="loading">Run an analysis to see ML predictions.</div>'}`;
+}
+
+function renderAlerts() {
+  const list = state.alerts?.alerts || [];
+  return `<div class="card"><div class="section-title">Live Scanner Alerts <small><button class="btn" id="readAlerts">Mark all as read</button></small></div>
+    ${list.length ? list.map(a => `<div class="alert-item ${a.read ? '' : 'unread'} ${a.type.toLowerCase()}">
+      <div class="alert-icon">${a.type === 'SELL' ? '↓' : '↑'}</div>
+      <div style="flex:1"><div><strong>${a.symbol}</strong> <span class="chip ${a.type === 'SELL' ? 'red' : 'green'}">${a.type}</span></div>
+      <div style="color:#b4bfd2;font-size:12px;margin-top:4px">${esc(a.message)}</div></div>
+      <div class="sub">${a.time}</div></div>`).join('') : '<div class="empty">No alerts yet — run a scan.</div>'}</div>`;
+}
+
+function renderTradingView() {
+  const sym = state.tvSymbol, interval = state.tvInterval, cat = state.catalog || {};
+  const quoteMap = Object.fromEntries([...(state.indices || []), ...(state.watchlist || [])].map(q => [q.symbol, q]));
+  const mapped = tvForSymbol(sym);
+  const options = catalogOptions(sym);
+  const chips = catalogChips(sym, 'data-tvsymbol', quoteMap);
+  return `<div class="input-row" style="max-width:820px;flex-wrap:wrap">
+      <select id="tvSymbol">${options}</select>
+      <select id="tvInterval">${['1m','5m','15m','30m','1h','1d'].map(i => `<option ${i === interval ? 'selected' : ''}>${i}</option>`).join('')}</select>
+      <button class="btn primary" id="tvLoad">Load Chart</button>
+      <a class="btn" href="https://www.tradingview.com/chart/?symbol=${encodeURIComponent(mapped)}" target="_blank" rel="noopener">Open on TradingView ↗</a>
+    </div>
+    <div id="tvFullWrap" class="tv-full-wrap">
+      <div class="card tv-card">
+        <div class="section-title"><span>${esc(mapped)} · ${esc(interval)} <small>TradingView advanced chart · IST</small></span>
+          <button class="btn" id="tvFullBtn">⛶ Fullscreen</button></div>
+        <div id="tvChart" class="tradingview-widget-container tv-chart">
+          <div class="tradingview-widget-container__widget"></div>
+        </div>
+      </div>
+    </div>
+    <div class="card" style="margin-top:16px"><div class="section-title">Symbol universe <small>${cat.total || 0} verified NSE/BSE symbols · click to switch chart</small></div>
+      <input id="tvSearch" class="tv-search" placeholder="Filter symbols (e.g. BANK, RELIANCE, SENSEX)" />
+      ${chips}
+      <p class="note" style="margin-top:14px">The chart is rendered by TradingView's public widget and streams from TradingView's own feeds; its built-in symbol search also reaches every NSE/BSE instrument. Yahoo Finance powers the live quote tags and the terminal's native charts. If the chart is blank, allow scripts from <code>s3.tradingview.com</code>.</p>
+    </div>`;
+}
+
+function renderSettings() {
+  const s = state.settings || {};
+  return `<div class="grid g2"><div class="card"><div class="section-title">Application</div>
+    ${[['App', s.app_name], ['Version', s.version], ['Market', s.market], ['Data source', s.data_source],
+       ['Refresh interval', (s.refresh_seconds || '') + ' sec'], ['ML model', s.model]].map(([k, v]) =>
+       `<div style="display:flex;justify-content:space-between;padding:10px 0;border-bottom:1px solid #1b2335">
+       <span class="sub">${k}</span><strong style="text-align:right">${esc(v)}</strong></div>`).join('')}</div>
+    <div class="card"><div class="section-title">Watchlist & Risk</div>
+      <p class="note">${(s.watchlist || []).join(' · ')}</p>
+      <div style="margin-top:14px">${[['Minimum signal confidence', (s.signal_min_confidence || '') + '%'],
+        ['Broker', s.broker?.broker], ['Broker connected', s.broker?.connected ? 'Yes' : 'No'],
+        ['Automated orders', s.broker?.trading_enabled ? 'Enabled' : 'Disabled']].map(([k, v]) =>
+        `<div style="display:flex;justify-content:space-between;padding:10px 0;border-bottom:1px solid #1b2335">
+        <span class="sub">${k}</span><strong>${esc(v)}</strong></div>`).join('')}</div>
+      <p class="note" style="margin-top:16px">Credentials stay in <code>.env</code>. No order is placed without an explicitly configured and authorised broker session.</p>
+    </div></div>`;
+}
+
+const TITLES = {
+  overview: ['Overview', 'Live market command center'], markets: ['Markets', 'Real-time Yahoo charts and watchlist'],
+  signals: ['Signals', 'ML-filtered trade setups'], positions: ['Positions', 'Broker holdings and order history'],
+  strategies: ['Strategies', 'Trading models'], ai: ['AI Insights', 'Machine-learning market analysis'],
+  alerts: ['Alerts', 'Scanner notifications'], tradingview: ['TradingView', 'Professional charts for NSE symbols'],
+  settings: ['Settings', 'Live feed and risk configuration']
+};
+const RENDERERS = { overview: renderOverview, markets: renderMarkets, signals: renderSignals,
+  positions: renderPositions, strategies: renderStrategies, ai: renderAI, alerts: renderAlerts,
+  tradingview: renderTradingView, settings: renderSettings };
+
+async function loadView() {
+  $('#view').innerHTML = '<div class="loading">Loading…</div>';
+  try {
+    if (state.view === 'overview') state.dashboard = await api('/api/dashboard');
+    if (state.view === 'markets') {
+      const [q, c, a, w, i, cat] = await Promise.all([
+        api(`/api/market/quote?symbol=${encodeURIComponent(state.symbol)}`),
+        api(`/api/market/candles?symbol=${encodeURIComponent(state.symbol)}&interval=${state.interval}&limit=120`),
+        api(`/api/ai/analysis?symbol=${encodeURIComponent(state.symbol)}&interval=${state.interval}`),
+        api('/api/market/watchlist'),
+        api('/api/market/indices'),
+        api('/api/market/catalog')
+      ]);
+      state.quote = q; state.candles = c; state.analysis = a;
+      state.watchlist = w.watchlist; state.indices = i.indices; state.catalog = cat;
+    }
+    if (state.view === 'signals') { const d = await api('/api/signals'); state.signals = d.signals; }
+    if (state.view === 'positions') {
+      const [p, t] = await Promise.all([api('/api/positions'), api('/api/trades')]);
+      state.positions = p; state.trades = t;
+    }
+    if (state.view === 'strategies') state.strategies = (await api('/api/strategies')).strategies;
+    if (state.view === 'ai') {
+      const [a, m] = await Promise.all([
+        api(`/api/ai/analysis?symbol=${state.symbol}&interval=${state.interval}`),
+        api(`/api/ai/model?interval=${state.interval}`)
+      ]);
+      state.analysis = a; state.model = m;
+    }
+    if (state.view === 'alerts') state.alerts = await api('/api/alerts');
+    if (state.view === 'tradingview') {
+      const [w, i, cat] = await Promise.all([
+        api('/api/market/watchlist'), api('/api/market/indices'), api('/api/market/catalog')
+      ]);
+      state.watchlist = w.watchlist; state.indices = i.indices; state.catalog = cat;
+    }
+    if (state.view === 'settings') state.settings = await api('/api/settings');
+    $('#view').innerHTML = RENDERERS[state.view]();
+    if (state.view === 'tradingview') mountTradingView();
+    updateBadges();
+  } catch (e) { $('#view').innerHTML = `<div class="empty">Could not load: ${esc(e.message)}</div>`; }
+}
+
+function updateBadges() {
+  $('#navSignals').textContent = state.signals.length || state.dashboard?.stats?.active_signals || 0;
+  $('#navAlerts').textContent = state.alerts?.alerts?.filter(a => !a.read).length || 0;
+}
+
+function navigate(view) {
+  state.view = view;
+  document.querySelectorAll('.nav-item').forEach(b => b.classList.toggle('active', b.dataset.view === view));
+  $('#pageTitle').textContent = TITLES[view][0]; $('#pageSub').textContent = TITLES[view][1];
+  $('#sidebar').classList.remove('open'); loadView();
+}
+
+function connectSocket() {
+  if (!TOKEN) return;
+  const proto = location.protocol === 'https:' ? 'wss' : 'ws';
+  // JWT travels as a WebSocket subprotocol, not in the URL/access logs.
+  const ws = new WebSocket(`${proto}://${location.host}/ws/market`, [TOKEN]);
+  const pill = $('#livePill');
+  ws.onopen = () => { state.connected = true; pill.className = 'live-pill'; pill.querySelector('span').textContent = 'LIVE · YAHOO'; };
+  ws.onmessage = (ev) => {
+    const msg = JSON.parse(ev.data);
+    if (msg.type !== 'ticks') return;
+    state.indices = msg.indices; state.watchlist = msg.watchlist;
+    if (state.view === 'markets') {
+      const q = state.quote;
+      const fresh = msg.watchlist.find(x => x.symbol === q?.symbol);
+      if (fresh) { state.quote = fresh; $('#view').innerHTML = renderMarkets(); }
+    } else if (state.view === 'overview' && state.dashboard) {
+      state.dashboard.indices = msg.indices;
+      state.dashboard.top_movers = [...msg.watchlist].sort((a,b) => Math.abs(b.change_pct)-Math.abs(a.change_pct)).slice(0,5);
+      $('#view').innerHTML = renderOverview();
+    }
+  };
+  ws.onclose = () => {
+    state.connected = false; pill.className = 'live-pill off'; pill.querySelector('span').textContent = 'RECONNECTING';
+    setTimeout(connectSocket, 3000);
+  };
+}
+
+document.addEventListener('click', async (e) => {
+  const nav = e.target.closest('.nav-item'); if (nav) return navigate(nav.dataset.view);
+  const go = e.target.closest('[data-go]'); if (go) return navigate(go.dataset.go);
+  const filter = e.target.closest('[data-filter]'); if (filter) { state.signalFilter = filter.dataset.filter; return renderSignals(); }
+  const toggle = e.target.closest('[data-toggle]');
+  if (toggle) {
+    const id = toggle.dataset.toggle, d = await api(`/api/strategies/${id}/toggle`, { method: 'POST' });
+    const s = d.strategy, item = state.strategies.find(x => x.id === id); Object.assign(item, s);
+    toggle.classList.toggle('on', s.enabled); toast(`${s.name} ${s.enabled ? 'enabled' : 'paused'}`); return;
+  }
+  if (e.target.closest('#tvFullBtn')) { toggleTvFullscreen(); return; }
+  const mktChip = e.target.closest('[data-mktsymbol]'); if (mktChip) { state.symbol = mktChip.dataset.mktsymbol; return loadView(); }
+  const tvChip = e.target.closest('[data-tvsymbol]'); if (tvChip) { state.tvSymbol = tvChip.dataset.tvsymbol; return loadView(); }
+  if (e.target.closest('#tvLoad')) { state.tvSymbol = $('#tvSymbol').value; state.tvInterval = $('#tvInterval').value; return loadView(); }
+  const sym = e.target.closest('[data-symbol]'); if (sym) { state.symbol = sym.dataset.symbol; return navigate('markets'); }
+  if (e.target.closest('#scanBtn') || e.target.closest('#scanBtn2')) {
+    toast('Scanning live market data…');
+    try {
+      const r = await api('/api/scan', { method: 'POST' });
+      state.signals = r.signals;
+      if (state.dashboard) state.dashboard.stats.active_signals = r.signals_generated;
+      toast(`${r.scanned} symbols · ${r.signals_generated} signals`);
+      if (state.view === 'signals') renderSignals(); else updateBadges();
+    } catch (err) { toast(err.message); }
+    return;
+  }
+  if (e.target.closest('#mktLoad')) { state.symbol = $('#mktSymbol').value; state.interval = $('#mktInterval').value; return loadView(); }
+  if (e.target.closest('#aiRun')) { state.symbol = $('#aiSymbol').value; state.interval = $('#aiInterval').value; return loadView(); }
+  if (e.target.closest('#readAlerts')) { await api('/api/alerts/read', { method: 'POST' }); toast('Alerts marked as read'); return loadView(); }
+  if (e.target.closest('#logoutBtn')) { localStorage.clear(); location.href = '/login'; return; }
+  if (e.target.closest('#menuBtn')) $('#sidebar').classList.toggle('open');
+});
+
+document.addEventListener('input', (e) => {
+  const isTv = e.target.matches('#tvSearch');
+  const isMkt = e.target.matches('#mktSearch');
+  if (!isTv && !isMkt) return;
+  const q = e.target.value.trim().toLowerCase();
+  const selector = isTv ? '[data-tvsymbol]' : '[data-mktsymbol]';
+  document.querySelectorAll(`#view ${selector}`).forEach(el => {
+    el.classList.toggle('hidden', !!q && !el.textContent.toLowerCase().includes(q));
+  });
+});
+
+$('#globalSearch').addEventListener('keydown', (e) => {
+  if (e.key === 'Enter' && e.target.value.trim()) {
+    state.symbol = e.target.value.trim().toUpperCase(); e.target.value = ''; navigate('markets');
+  }
+});
+
+if (TOKEN) {
+  $('#avatar').textContent = ((USER.name || USER.email || 'U').slice(0, 2).toUpperCase());
+  setInterval(() => { $('#clock').textContent = new Date().toLocaleTimeString('en-IN', { hour12: false }); }, 1000);
+  $('#clock').textContent = new Date().toLocaleTimeString('en-IN', { hour12: false });
+  connectSocket();
+  loadView();
+}
