@@ -1,0 +1,11 @@
+services/
+deploy/
+.vscode/
+__pycache__/
+*.pyc
+.venv/
+data/
+logs/
+_*.py
+*_out.txt
+_srv*_*.txt
