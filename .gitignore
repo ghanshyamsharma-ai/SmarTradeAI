@@ -16,8 +16,11 @@ data/exports/
 *.p12
 *.pfx
 
-# API sources (excluded per request)
+# Source directories excluded per request
 api/
+ai/
+backend/
+backend_platform/
 
 # Python
 __pycache__/
