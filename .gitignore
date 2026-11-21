@@ -16,6 +16,9 @@ data/exports/
 *.p12
 *.pfx
 
+# API sources (excluded per request)
+api/
+
 # Python
 __pycache__/
 *.py[cod]
