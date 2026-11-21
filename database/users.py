@@ -1,5 +1,6 @@
 """SQLite-backed user accounts for the trading terminal."""
 
+import os
 import sqlite3
 from datetime import datetime
 from pathlib import Path
@@ -7,7 +8,24 @@ from typing import Any, Dict, Optional
 
 from core.security import hash_password, verify_password
 
-DB_PATH = Path(__file__).resolve().parent.parent / "data" / "app.db"
+
+def _resolve_db_path() -> Path:
+    override = os.getenv("USER_DB_PATH")
+    candidates = [
+        Path(override).expanduser() if override else Path(__file__).resolve().parent.parent / "data" / "app.db",
+        Path(os.getenv("TMPDIR", "/tmp")) / "smartraderai-app.db",
+    ]
+    for candidate in candidates:
+        try:
+            candidate.parent.mkdir(parents=True, exist_ok=True)
+            candidate.touch(exist_ok=True)
+            return candidate
+        except OSError:
+            continue
+    return candidates[0]
+
+
+DB_PATH = _resolve_db_path()
 
 
 def _connect() -> sqlite3.Connection:

@@ -22,10 +22,20 @@ def _secret_key() -> bytes:
     env = os.getenv("JWT_SECRET")
     if env:
         return env.encode("utf-8")
-    SECRET_FILE.parent.mkdir(parents=True, exist_ok=True)
-    if not SECRET_FILE.exists():
-        SECRET_FILE.write_text(secrets.token_hex(32), encoding="utf-8")
-    return SECRET_FILE.read_text(encoding="utf-8").strip().encode("utf-8")
+    # Serverless filesystems can be read-only. Try the project path first,
+    # then a writable temp path, then fall back to an in-process secret.
+    for candidate in (
+        SECRET_FILE,
+        Path(os.getenv("TMPDIR", "/tmp")) / "smartraderai-jwt-secret",
+    ):
+        try:
+            candidate.parent.mkdir(parents=True, exist_ok=True)
+            if not candidate.exists():
+                candidate.write_text(secrets.token_hex(32), encoding="utf-8")
+            return candidate.read_text(encoding="utf-8").strip().encode("utf-8")
+        except OSError:
+            continue
+    return secrets.token_bytes(32)
 
 
 SECRET_KEY = _secret_key()
