@@ -1,10 +1,14 @@
-services/
+services/admin-django/
+services/gateway-node/
+services/stream-java/
 deploy/
 .vscode/
 __pycache__/
 *.pyc
 .venv/
-data/
+data/app.db
+data/.jwt_secret
+data/exports/
 logs/
 _*.py
 *_out.txt
