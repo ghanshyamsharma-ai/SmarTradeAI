@@ -231,6 +231,26 @@ $env:JWT_SECRET = "replace-with-a-long-random-secret"
 .\deploy\azure\deploy.ps1 -ResourceGroup smartraderai-rg -Location centralindia
 ```
 
+### Vercel
+
+The root FastAPI app is deployed as a single Vercel project. `vercel.json` pins
+the framework, and `.vercelignore` keeps optional sidecars out of the function
+bundle while preserving all application source files.
+
+Production URL: <https://smar-trade-ai-yjzl.vercel.app>
+
+Set these in the Vercel project environment variables:
+
+| Variable | Purpose |
+| --- | --- |
+| `JWT_SECRET` | Long random secret for stable user/service tokens across instances. |
+| `OAUTH_CLIENT_SECRET`, `OAUTH_CLIENTS` | Optional machine-client credentials. |
+| `MONGO_URI`, `DATABASE_URL` | Optional external persistence for users and ticks. |
+
+The serverless filesystem is ephemeral: without an external database, registered
+users and local SQLite history do not survive instance replacement. Live Yahoo
+quotes, catalog, charts and ML remain real.
+
 ## Model details
 
 `ai/ml_model.py` builds 13 price, volume and technical features from Yahoo OHLCV
