@@ -192,30 +192,38 @@ class MLService:
             ),
         }
 
-    async def predict(self, symbol: str, interval: str = "5m") -> Dict[str, Any]:
-        bundle = await self.bundle(interval)
-        data = await yahoo.chart(symbol, interval, 400)
+    def predict_data(self, data: Dict[str, Any], bundle: ModelBundle) -> Dict[str, Any]:
+        """Score one already-fetched Yahoo chart payload with a trained bundle."""
         rows, _, _ = _feature_rows(data["candles"])
+        empty = {
+            "symbol": data.get("symbol", ""),
+            "name": data.get("name", data.get("symbol", "")),
+            "price": data.get("price", 0.0),
+            "change_pct": data.get("change_pct", 0.0),
+            "bias": "NEUTRAL", "confidence": 0.0,
+            "probability_up": 0.0, "probability_down": 0.0, "probability_flat": 100.0,
+            "model": self.status(bundle), "market_time": data.get("market_time", ""),
+        }
         if not rows:
-            return {"symbol": symbol, "bias": "NEUTRAL", "confidence": 0.0}
+            return empty
         probs = bundle.model.predict_proba(np.asarray([rows[-1]]))[0]
         pmap = {int(c): float(p) for c, p in zip(bundle.model.classes_, probs)}
         up, down, flat = pmap.get(1, 0.0), pmap.get(-1, 0.0), pmap.get(0, 0.0)
         bias = "BULLISH" if up >= down and up >= flat else "BEARISH" if down >= flat else "NEUTRAL"
         confidence = max(up, down, flat)
-        return {
-            "symbol": data["symbol"],
-            "name": data["name"],
-            "price": data["price"],
-            "change_pct": data["change_pct"],
+        empty.update({
             "bias": bias,
             "confidence": round(confidence * 100, 1),
             "probability_up": round(up * 100, 1),
             "probability_down": round(down * 100, 1),
             "probability_flat": round(flat * 100, 1),
-            "model": self.status(bundle),
-            "market_time": data["market_time"],
-        }
+        })
+        return empty
+
+    async def predict(self, symbol: str, interval: str = "5m") -> Dict[str, Any]:
+        bundle = await self.bundle(interval)
+        data = await yahoo.chart(symbol, interval, 400)
+        return self.predict_data(data, bundle)
 
 
 ml = MLService()

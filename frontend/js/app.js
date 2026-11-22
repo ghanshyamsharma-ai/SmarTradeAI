@@ -9,7 +9,9 @@ const state = {
   tvSymbol: 'RELIANCE.NS', tvInterval: '15',
   dashboard: null, quote: null, candles: null, analysis: null, model: null,
   watchlist: [], indices: [], symbols: [], signals: [], positions: null,
-  trades: null, strategies: [], alerts: null, settings: null, catalog: null, connected: false
+  trades: null, strategies: [], alerts: null, settings: null, catalog: null, connected: false,
+  targets: [], targetsMeta: null, targetFailures: [], targetGroup: 'all',
+  targetSort: 'confidence', targetQuery: '', targetLoading: false, targetProgress: ''
 };
 
 const $ = (s) => document.querySelector(s);
@@ -17,7 +19,7 @@ const fmt = (n) => Number(n || 0).toLocaleString('en-IN', { maximumFractionDigit
 const money = (n) => '₹' + fmt(n);
 const signCls = (v) => Number(v) >= 0 ? 'pos' : 'neg';
 const signStr = (v) => (Number(v) >= 0 ? '+' : '') + fmt(v);
-const esc = (s) => String(s ?? '').replace(/[&<>]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;' }[c]));
+const esc = (s) => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 
 async function api(path, options = {}) {
   const res = await fetch(path, {
@@ -384,7 +386,136 @@ function renderAI() {
         ${Object.entries(m.feature_importance).map(([k, v]) => `<div class="bar-row"><span>${esc(k)}</span>
           <div class="bar-track"><i style="width:${(v * 100).toFixed(1)}%"></i></div><strong>${(v * 100).toFixed(1)}%</strong></div>`).join('')}
         <p class="note" style="margin-top:14px">Trained ${esc(m.trained_at)} on ${m.symbols.length} live symbols with ${fmt(m.train_samples)} train / ${fmt(m.test_samples)} held-out samples. Model retrains every 15 minutes.</p>
-      </div>` : ''}` : '<div class="loading">Run an analysis to see ML predictions.</div>'}`;
+      </div>` : ''}` : '<div class="loading">Run an analysis to see ML predictions.</div>'}
+    <div class="card" style="margin-top:16px"><div class="section-title">TARGET & STOPLOSS <small>Momentum + RandomForest levels for every bank, company and index</small></div>
+      <p class="note">Live Yahoo 5-minute candles power Entry, Target, Stoploss and the buy zone for NIFTY 50, NIFTY BANK, all NSE banks and every company in the catalog.</p>
+      <button class="btn primary" data-go="targets" style="margin-top:12px">Open Target &amp; Stoploss →</button>
+    </div>`;
+}
+
+function targetRow(r) {
+  const sideClass = r.signal === 'BUY' ? 'buy' : r.signal === 'SELL' ? 'sell' : 'wait';
+  return `<tr data-targetsymbol="${esc(r.symbol)}" style="cursor:pointer">
+    <td><div class="sym">${esc(r.symbol)}</div><div class="sub">${esc(r.name)}</div></td>
+    <td><span class="chip indigo">${esc(r.group_label)}</span><div class="sub">${esc(r.exchange)} · ${esc(r.interval_used || '5m')}</div></td>
+    <td>${money(r.price)}<div class="sub ${signCls(r.change_pct)}">${signStr(r.change_pct)}%</div></td>
+    <td><span class="side-tag ${sideClass}">${esc(r.signal)}</span><div class="sub">ML ${esc(r.ml_bias)}</div></td>
+    <td><strong>${r.confidence}%</strong><div class="meter"><i style="width:${r.confidence}%"></i></div>
+      <div class="sub">Momentum ${r.momentum_score > 0 ? '+' : ''}${r.momentum_score} · RSI ${r.rsi14 ?? '—'}</div>
+      ${r.stale_days > 10 ? `<div class="sub" style="color:#fca5a5">Stale ${r.stale_days}d · reference only</div>` : ''}</td>
+    <td>${money(r.entry)}<div class="sub ts-zone">${esc(r.zone_label)} ${money(r.zone_low)}–${money(r.zone_high)}</div></td>
+    <td class="pos">${money(r.target)}</td>
+    <td class="neg">${money(r.stoploss)}</td>
+    <td>1:${r.risk_reward}<div class="sub">ATR14 ${money(r.atr14)}</div></td>
+    <td style="max-width:340px"><div class="ts-action">${esc(r.action)}</div><div class="sub">${esc(r.reason)}</div></td>
+  </tr>`;
+}
+
+function renderTargets() {
+  const meta = { ...(state.targetsMeta || {}), failed: state.targetFailures.length };
+  const cat = state.catalog || {};
+  const sorted = [...state.targets];
+  if (state.targetSort === 'rr') sorted.sort((a, b) => b.risk_reward - a.risk_reward);
+  else if (state.targetSort === 'change') sorted.sort((a, b) => Math.abs(b.change_pct) - Math.abs(a.change_pct));
+  else sorted.sort((a, b) => (a.signal === 'WAIT') - (b.signal === 'WAIT') || b.confidence - a.confidence);
+
+  const q = state.targetQuery.trim().toLowerCase();
+  const rows = q
+    ? sorted.filter(r => `${r.symbol} ${r.name} ${r.group_label} ${r.exchange} ${r.interval_used || ''}`.toLowerCase().includes(q))
+    : sorted;
+  const failures = state.targetFailures;
+
+  const counts = {
+    all: cat.total || 196, indices: (cat.indices || []).length || 3,
+    banks: (cat.banks || []).length || 24,
+    nse_companies: (cat.nse_companies || []).length || 95,
+    bse_companies: (cat.bse_companies || []).length || 74
+  };
+  const groups = [
+    ['all', `ALL SYMBOLS (${counts.all})`], ['indices', `INDICES · NIFTY 50 / BANK / SENSEX (${counts.indices})`],
+    ['banks', `NSE BANKS (${counts.banks})`], ['nse_companies', `NSE COMPANIES (${counts.nse_companies})`],
+    ['bse_companies', `BSE COMPANIES (${counts.bse_companies})`]
+  ];
+  const buys = rows.filter(r => r.signal === 'BUY').length;
+  const sells = rows.filter(r => r.signal === 'SELL').length;
+  const waits = rows.filter(r => r.signal === 'WAIT').length;
+  const avgConf = rows.length ? Math.round(rows.reduce((n, r) => n + r.confidence, 0) / rows.length) : 0;
+  const progress = state.targetLoading
+    ? `<div class="ts-progress"><i></i><span>${esc(state.targetProgress || 'Scanning live Yahoo data…')}</span></div>` : '';
+
+  return `<div class="input-row" style="flex-wrap:wrap">
+      <select id="targetGroup">${groups.map(([v, label]) => `<option value="${v}" ${v === state.targetGroup ? 'selected' : ''}>${esc(label)}</option>`).join('')}</select>
+      <select id="targetSort">
+        <option value="confidence" ${state.targetSort === 'confidence' ? 'selected' : ''}>Sort: ML confidence</option>
+        <option value="rr" ${state.targetSort === 'rr' ? 'selected' : ''}>Sort: risk : reward</option>
+        <option value="change" ${state.targetSort === 'change' ? 'selected' : ''}>Sort: price move</option>
+      </select>
+      <input id="targetSearch" value="${esc(state.targetQuery)}" placeholder="Filter symbol / bank / company…" />
+      <button class="btn primary" id="targetRefresh" ${state.targetLoading ? 'disabled' : ''}>${state.targetLoading ? '⟳ Scanning…' : '⟳ Refresh live scan'}</button>
+    </div>
+    ${progress}
+    <div class="grid g4" style="margin-bottom:16px">
+      ${kpi('Symbols scanned', rows.length, `${esc(meta.generated_at || 'awaiting live scan')}${q ? ` · filtered from ${state.targets.length}` : ''}`)}
+      ${kpi('Buy setups', buys, 'ML + momentum agree', 'pos')}
+      ${kpi('Sell setups', sells, 'ML + momentum agree', 'neg')}
+      ${kpi('Average confidence', avgConf + '%', `RF accuracy ${meta.model_accuracy ?? '—'}% · edge ${meta.model_edge ?? '—'}% · ${meta.failed} unavailable`)}
+    </div>
+    <div class="card"><div class="section-title">TARGET & STOPLOSS
+        <small>5m primary · real 1d fallback where needed · ATR(14) levels · ${waits} watch-only</small></div>
+      ${rows.length ? `<div class="tbl-scroll"><table><thead><tr>
+        <th>Symbol</th><th>Group</th><th>LTP</th><th>Signal</th><th>Confidence</th>
+        <th>Entry / Where to buy</th><th>Target</th><th>Stoploss</th><th>R:R</th><th>Plan</th>
+      </tr></thead><tbody>${rows.map(targetRow).join('')}</tbody></table></div>`
+        : `<div class="empty">${state.targetLoading ? 'Fetching real Yahoo candles and scoring each symbol…' : q ? 'No rows match this filter.' : 'No live predictions loaded yet. Click Refresh live scan.'}</div>`}
+      ${failures.length ? `<div class="sub" style="margin-top:8px;color:#fca5a5">Unavailable from Yahoo: ${failures.slice(0, 6).map(f => `${esc(f.symbol)} (${esc(f.reason)})`).join(' · ')}${failures.length > 6 ? ` · +${failures.length - 6} more` : ''}</div>` : ''}
+      <p class="note" style="margin-top:14px">${esc(meta.note || 'Levels are derived from live Yahoo Finance candles and the genuine RandomForest model. No orders are placed.')}
+        ${meta.trained_symbols ? ` Model trained on ${meta.trained_symbols.length} live watchlist symbols.` : ''}
+        ${esc(meta.delay_note || 'Yahoo Finance · NSE quotes may be delayed ~15 minutes')}. Click any row to open its live chart in Markets.</p>
+    </div>`;
+}
+
+async function loadTargets(force = false) {
+  if (state.targetLoading) return;
+  const ticket = (loadTargets.ticket || 0) + 1;
+  loadTargets.ticket = ticket;
+  state.targetLoading = true;
+  state.targets = [];
+  state.targetsMeta = null;
+  state.targetFailures = [];
+
+  const groups = state.targetGroup === 'all'
+    ? ['indices', 'banks', 'nse_companies', 'bse_companies'] : [state.targetGroup];
+  const labels = {
+    indices: 'NIFTY / SENSEX', banks: 'NSE BANKS',
+    nse_companies: 'NSE COMPANIES', bse_companies: 'BSE COMPANIES'
+  };
+  const fallback = { indices: 3, banks: 24, nse_companies: 95, bse_companies: 74 };
+  const pageSize = 16;
+
+  try {
+    for (const group of groups) {
+      const total = (state.catalog?.[group] || []).length || fallback[group];
+      for (let offset = 0; offset < total; offset += pageSize) {
+        state.targetProgress = `${labels[group]} · ${Math.min(offset + pageSize, total)}/${total} symbols · ${state.targets.length} levels ready`;
+        if (state.view === 'targets') $('#view').innerHTML = renderTargets();
+        const data = await api(`/api/ai/targets?group=${group}&offset=${offset}&limit=${pageSize}${force ? '&refresh=true' : ''}`);
+        if (ticket !== loadTargets.ticket) return;
+        state.targets.push(...data.targets);
+        state.targetsMeta = data.meta;
+        state.targetFailures.push(...(data.meta?.failed_symbols || []));
+      }
+    }
+    const failed = state.targetFailures.length;
+    state.targetProgress = `Complete · ${state.targets.length} live predictions · ${failed} unavailable${failed ? ' — see note below' : ''}`;
+  } catch (err) {
+    if (ticket !== loadTargets.ticket) return;
+    state.targetProgress = `Scan failed: ${err.message}`;
+    toast(`Target scan failed: ${err.message}`);
+  } finally {
+    if (ticket !== loadTargets.ticket) return;
+    state.targetLoading = false;
+    if (state.view === 'targets') $('#view').innerHTML = renderTargets();
+  }
 }
 
 function renderAlerts() {
@@ -447,12 +578,13 @@ const TITLES = {
   overview: ['Overview', 'Live market command center'], markets: ['Markets', 'Real-time Yahoo charts and watchlist'],
   signals: ['Signals', 'ML-filtered trade setups'], positions: ['Positions', 'Broker holdings and order history'],
   strategies: ['Strategies', 'Trading models'], ai: ['AI Insights', 'Machine-learning market analysis'],
+  targets: ['Target & Stoploss', 'AI + momentum levels for every bank, company and index'],
   alerts: ['Alerts', 'Scanner notifications'], tradingview: ['TradingView', 'Professional charts for NSE symbols'],
   settings: ['Settings', 'Live feed and risk configuration']
 };
 const RENDERERS = { overview: renderOverview, markets: renderMarkets, signals: renderSignals,
-  positions: renderPositions, strategies: renderStrategies, ai: renderAI, alerts: renderAlerts,
-  tradingview: renderTradingView, settings: renderSettings };
+  positions: renderPositions, strategies: renderStrategies, ai: renderAI, targets: renderTargets,
+  alerts: renderAlerts, tradingview: renderTradingView, settings: renderSettings };
 
 async function loadView() {
   $('#view').innerHTML = '<div class="loading">Loading…</div>';
@@ -482,6 +614,11 @@ async function loadView() {
         api(`/api/ai/model?interval=${state.interval}`)
       ]);
       state.analysis = a; state.model = m;
+    }
+    if (state.view === 'targets') {
+      state.catalog = await api('/api/market/catalog');
+      $('#view').innerHTML = renderTargets();
+      await loadTargets();
     }
     if (state.view === 'alerts') state.alerts = await api('/api/alerts');
     if (state.view === 'tradingview') {
@@ -564,17 +701,26 @@ document.addEventListener('click', async (e) => {
   }
   if (e.target.closest('#mktLoad')) { state.symbol = $('#mktSymbol').value; state.interval = $('#mktInterval').value; return loadView(); }
   if (e.target.closest('#aiRun')) { state.symbol = $('#aiSymbol').value; state.interval = $('#aiInterval').value; return loadView(); }
+  if (e.target.closest('#targetRefresh')) { loadTargets(true); return; }
+  const tSym = e.target.closest('[data-targetsymbol]'); if (tSym) { state.symbol = tSym.dataset.targetsymbol; return navigate('markets'); }
   if (e.target.closest('#readAlerts')) { await api('/api/alerts/read', { method: 'POST' }); toast('Alerts marked as read'); return loadView(); }
   if (e.target.closest('#logoutBtn')) { localStorage.clear(); location.href = '/login'; return; }
   if (e.target.closest('#menuBtn')) $('#sidebar').classList.toggle('open');
 });
 
+document.addEventListener('change', (e) => {
+  if (e.target.matches('#targetGroup')) { state.targetGroup = e.target.value; loadTargets(); }
+  if (e.target.matches('#targetSort')) { state.targetSort = e.target.value; renderTargets(); }
+});
+
 document.addEventListener('input', (e) => {
   const isTv = e.target.matches('#tvSearch');
   const isMkt = e.target.matches('#mktSearch');
-  if (!isTv && !isMkt) return;
+  const isTarget = e.target.matches('#targetSearch');
+  if (!isTv && !isMkt && !isTarget) return;
+  if (isTarget) state.targetQuery = e.target.value;
   const q = e.target.value.trim().toLowerCase();
-  const selector = isTv ? '[data-tvsymbol]' : '[data-mktsymbol]';
+  const selector = isTv ? '[data-tvsymbol]' : isMkt ? '[data-mktsymbol]' : '[data-targetsymbol]';
   document.querySelectorAll(`#view ${selector}`).forEach(el => {
     el.classList.toggle('hidden', !!q && !el.textContent.toLowerCase().includes(q));
   });

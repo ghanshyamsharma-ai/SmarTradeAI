@@ -201,10 +201,21 @@ GET  /api/broker/status
 GET  /api/strategies
 GET  /api/ai/analysis?symbol=INFY.NS
 GET  /api/ai/model?interval=5m
+GET  /api/ai/targets?group=indices&offset=0&limit=16
 GET  /api/alerts
 GET  /api/settings
 WS   /ws/market  (JWT sent as Sec-WebSocket-Protocol; legacy ?token= still accepted)
 ```
+
+`GET /api/ai/targets` powers **TARGET & STOPLOSS**. It pages through the full
+backend catalog (indices, NSE banks, NSE companies and BSE companies) and scores
+each symbol from real Yahoo OHLCV candles: live 5m where available, real 1d with
+a per-row label where 5m is unavailable. Direction is the genuine RandomForest
+bias confirmed by EMA/RSI/candle momentum; target, stoploss, buy zone and R:R
+come from ATR(14) on those same candles. Symbols Yahoo cannot serve at either
+interval are omitted and listed as failures — no estimates are substituted.
+Model accuracy, edge, training universe, caveats and Yahoo delay notes are
+returned in `meta` and shown in the UI. Stale candles are forced to watch-only.
 
 ## Cloud deployment
 

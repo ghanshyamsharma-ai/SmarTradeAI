@@ -18,6 +18,7 @@ from services.market_data import (
 )
 from services.portfolio import broker_status, get_positions, get_trades
 from services.signal_engine import scan
+from services.target_planner import build_targets
 
 router = APIRouter(prefix="/api", dependencies=[Depends(get_current_user)])
 
@@ -157,6 +158,21 @@ async def ai_analysis(
 async def ai_model(interval: str = Query(default="5m")) -> Dict[str, Any]:
     try:
         return ml.status(await ml.bundle(interval))
+    except Exception as exc:
+        raise _guard(exc) from exc
+
+
+@router.get("/ai/targets")
+async def ai_targets(
+    group: str = Query(default="all"),
+    limit: int = Query(default=16, ge=1, le=50),
+    offset: int = Query(default=0, ge=0),
+    refresh: bool = Query(default=False),
+) -> Dict[str, Any]:
+    if group not in {"all", "indices", "banks", "nse_companies", "bse_companies"}:
+        raise HTTPException(status_code=400, detail="Unknown symbol group")
+    try:
+        return await build_targets(group, limit, offset, refresh)
     except Exception as exc:
         raise _guard(exc) from exc
 
