@@ -452,3 +452,7 @@ html[data-theme="black"] .btn.danger { background:#ef44441a; color:#f87171; bord
 html[data-theme="black"] .modal, html[data-theme="black"] .modal-content, html[data-theme="black"] .dropdown-menu { background:#0a0a0a; color:var(--text); border-color:var(--line); }
 html[data-theme="black"] table th, html[data-theme="black"] table td, html[data-theme="black"] .settings-row, html[data-theme="black"] .activity-item, html[data-theme="black"] .session-item, html[data-theme="black"] .divider { border-color:var(--line); }
 html[data-theme="black"] .brand-cube { box-shadow: inset 0 0 0 1px #000, 0 6px 16px #38bdf822; }
+
+.avatar-btn{overflow:hidden;padding:0;}
+.avatar-btn img{width:100%;height:100%;object-fit:cover;display:block;border-radius:50%;}
+.avatar-btn.has-img{background:transparent;}

@@ -660,6 +660,12 @@ function applyAppPreferences(profile) {
   document.body.classList.toggle('reduced-motion', !!app.accessibility?.reduced_motion);
   document.body.classList.toggle('high-contrast', !!app.accessibility?.high_contrast);
 }
+function syncAvatar(p) {
+  const av = $('#avatarBtn'); if (!av) return;
+  const src = (p && Object.prototype.hasOwnProperty.call(p, 'avatar_url')) ? p.avatar_url : (state.profile?.avatar_url || '');
+  if (src) { av.innerHTML = `<img src="${esc(src)}" alt="avatar">`; av.classList.add('has-img'); }
+  else { av.textContent = initials(p?.name || USER.name, p?.email || USER.email); av.classList.remove('has-img'); }
+}
 
 function renderProfile() {
   const p = state.profile || {};
@@ -1064,7 +1070,7 @@ document.addEventListener('click', async (e) => {
   const prefToggle = e.target.closest('[data-pref-toggle]');
   if (prefToggle) { prefToggle.classList.toggle('on'); prefToggle.dataset.prefValue = prefToggle.classList.contains('on') ? '1' : '0'; return; }
   if (e.target.closest('#removeAvatarBtn')) {
-    try { state.profile = await api('/api/profile', { method:'PUT', body: JSON.stringify({avatar_url:''}) }); toast('Profile photo removed'); loadView(); } catch(err){ toast(err.message); }
+    try { state.profile = await api('/api/profile', { method:'PUT', body: JSON.stringify({avatar_url:''}) }); syncAvatar(state.profile); toast('Profile photo removed'); loadView(); } catch(err){ toast(err.message); }
     return;
   }
   if (e.target.closest('#exportDataBtn')) {
@@ -1198,7 +1204,7 @@ document.addEventListener('submit', async (e) => {
     try {
       const p = await api('/api/profile', { method:'PUT', body: JSON.stringify(payload) });
       state.profile = p; USER.name = p.name; USER.email = p.email; localStorage.setItem('stai_user', JSON.stringify(USER));
-      const av = $('#avatarBtn'); if (av) av.textContent = initials(p.name,p.email);
+      syncAvatar(p);
       toast('Profile updated'); loadView();
     } catch (err) { toast(err.message); }
   }
@@ -1289,7 +1295,7 @@ document.addEventListener('change', (e) => {
     reader.onload = async () => {
       try {
         const p = await api('/api/profile', { method:'PUT', body: JSON.stringify({avatar_url:String(reader.result)}) });
-        state.profile = p; toast('Profile photo updated'); loadView();
+        state.profile = p; syncAvatar(p); toast('Profile photo updated'); loadView();
       } catch (err) { toast(err.message); }
     };
     reader.readAsDataURL(file);
@@ -1316,12 +1322,11 @@ $('#globalSearch').addEventListener('keydown', (e) => {
 });
 
 if (TOKEN) {
-  const avatarEl = $('#avatarBtn') || $('#avatar');
-  if (avatarEl) avatarEl.textContent = ((USER.name || USER.email || 'U').slice(0, 2).toUpperCase());
+  syncAvatar(USER);
   setInterval(() => { $('#clock').textContent = new Date().toLocaleTimeString('en-IN', { hour12: false }); }, 1000);
   $('#clock').textContent = new Date().toLocaleTimeString('en-IN', { hour12: false });
   connectSocket();
   applyTheme(localStorage.getItem('stai_theme') || 'default');
-  api('/api/profile').then(p => { state.profile = p; applyAppPreferences(p); const av=$('#avatarBtn'); if(av && (p?.name||p?.email)) av.textContent = initials(p.name,p.email); }).catch(()=>{});
+  api('/api/profile').then(p => { state.profile = p; applyAppPreferences(p); syncAvatar(p); }).catch(()=>{});
   loadView();
 }
