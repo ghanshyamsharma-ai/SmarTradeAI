@@ -102,11 +102,11 @@ class MeanReversionStrategy(BaseStrategy):
         if upper is None or lower is None or rsi is None:
             return None
 
-        if price <= lower and rsi < 38:
-            side, score = "BUY", 70
+        if price <= lower and rsi < 20:
+            side, score = "BUY", 80
             reason = f"Price at lower band • RSI {rsi}"
-        elif price >= upper and rsi > 62:
-            side, score = "SELL", 70
+        elif price >= upper and rsi > 80:
+            side, score = "SELL", 20
             reason = f"Price at upper band • RSI {rsi}"
         else:
             return None

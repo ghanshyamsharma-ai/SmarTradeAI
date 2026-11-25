@@ -3,6 +3,7 @@
 from typing import Any, Dict, List, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query
+from pydantic import BaseModel, Field
 
 from ai.analyzer import analyze
 from ai.ml_model import ml
@@ -16,11 +17,18 @@ from services.market_data import (
     get_candles, get_feed, get_indices, get_quote, get_top_movers,
     get_watchlist, market_breadth,
 )
+from services.openai_brief import BriefUnavailable, brief_status, generate_brief
 from services.portfolio import broker_status, get_positions, get_trades
 from services.signal_engine import scan
 from services.target_planner import build_targets
 
 router = APIRouter(prefix="/api", dependencies=[Depends(get_current_user)])
+
+
+class BriefRequest(BaseModel):
+    symbol: str = Field(default="RELIANCE", min_length=1, max_length=32)
+    interval: str = Field(default="5m")
+    refresh: bool = False
 
 
 def _guard(exc: Exception) -> HTTPException:
@@ -162,6 +170,23 @@ async def ai_model(interval: str = Query(default="5m")) -> Dict[str, Any]:
         raise _guard(exc) from exc
 
 
+@router.get("/ai/brief/status")
+async def ai_brief_status() -> Dict[str, Any]:
+    return brief_status()
+
+
+@router.post("/ai/brief")
+async def ai_brief(payload: BriefRequest) -> Dict[str, Any]:
+    if payload.interval not in {"5m", "1d"}:
+        raise HTTPException(status_code=400, detail="Brief supports 5m or 1d interval")
+    try:
+        return await generate_brief(payload.symbol.strip().upper(), payload.interval, payload.refresh)
+    except BriefUnavailable as exc:
+        raise HTTPException(status_code=503, detail=str(exc)) from exc
+    except Exception as exc:
+        raise _guard(exc) from exc
+
+
 @router.get("/ai/targets")
 async def ai_targets(
     group: str = Query(default="all"),
@@ -196,5 +221,6 @@ async def app_settings() -> Dict[str, Any]:
         "watchlist": settings.watchlist, "indices": settings.indices,
         "signal_min_confidence": settings.SIGNAL_MIN_CONFIDENCE,
         "model": "RandomForestClassifier (retrained every 15 minutes)",
+        "openai": brief_status(),
         "broker": broker_status(),
     }

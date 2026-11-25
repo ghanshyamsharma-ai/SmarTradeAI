@@ -4,7 +4,7 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>SmarTraderAI</title>
-  <link rel="stylesheet" href="/static/css/style.css?v=targets-1" />
+  <link rel="stylesheet" href="/static/css/style.css?v=layout-1" />
 </head>
 <body>
   <div class="app">
@@ -17,34 +17,37 @@
         <div class="brand-sub">PRO TERMINAL</div>
       </div>
 
-      <div class="nav-label">WORKSPACE</div>
-      <nav class="nav" id="nav">
-        <button class="nav-item active" data-view="overview"><span class="ico">▦</span>Overview</button>
-        <button class="nav-item" data-view="markets"><span class="ico">⌁</span>Markets</button>
-        <button class="nav-item" data-view="signals"><span class="ico">◎</span>Signals<span class="nav-badge" id="navSignals">0</span></button>
-        <button class="nav-item" data-view="positions"><span class="ico">▤</span>Positions</button>
-        <button class="nav-item" data-view="strategies"><span class="ico">⚙</span>Strategies</button>
-      </nav>
+      <div class="sidebar-scroll" id="sidebarScroll">
+        <div class="nav-label">WORKSPACE</div>
+        <nav class="nav" id="nav">
+          <button class="nav-item active" data-view="overview"><span class="ico">▦</span><span class="nav-text">Overview</span></button>
+          <button class="nav-item" data-view="markets"><span class="ico">⌁</span><span class="nav-text">Markets</span></button>
+          <button class="nav-item" data-view="signals"><span class="ico">◎</span><span class="nav-text">Signals</span><span class="nav-badge" id="navSignals">0</span></button>
+          <button class="nav-item" data-view="positions"><span class="ico">▤</span><span class="nav-text">Positions</span></button>
+          <button class="nav-item" data-view="strategies"><span class="ico">⚙</span><span class="nav-text">Strategies</span></button>
+        </nav>
 
-      <div class="nav-label">INTELLIGENCE</div>
-      <nav class="nav">
-        <button class="nav-item" data-view="ai"><span class="ico">✦</span>AI Insights</button>
-        <button class="nav-item" data-view="targets"><span class="ico">⌖</span>Target &amp; Stoploss</button>
-        <button class="nav-item" data-view="alerts"><span class="ico">◔</span>Alerts<span class="nav-badge warn" id="navAlerts">0</span></button>
-        <button class="nav-item" data-view="tradingview"><span class="ico">▥</span>TradingView</button>
-        <button class="nav-item" data-view="settings"><span class="ico">⋮</span>Settings</button>
-      </nav>
+        <div class="nav-label">INTELLIGENCE</div>
+        <nav class="nav">
+          <button class="nav-item" data-view="ai"><span class="ico">✦</span><span class="nav-text">AI Insights</span></button>
+          <button class="nav-item" data-view="brief"><span class="ico">✧</span><span class="nav-text">AI Market Brief</span></button>
+          <button class="nav-item" data-view="targets"><span class="ico">⌖</span><span class="nav-text">Target &amp; Stoploss</span></button>
+          <button class="nav-item" data-view="alerts"><span class="ico">◔</span><span class="nav-text">Alerts</span><span class="nav-badge warn" id="navAlerts">0</span></button>
+          <button class="nav-item" data-view="tradingview"><span class="ico">▥</span><span class="nav-text">TradingView</span></button>
+          <button class="nav-item" data-view="settings"><span class="ico">⋮</span><span class="nav-text">Settings</span></button>
+        </nav>
+      </div>
 
       <div class="sidebar-foot">
         <div class="status-dot"></div>
-        <div><strong>Yahoo Finance</strong><small>Live/delayed feed · NSE</small></div>
+        <div class="sidebar-foot-text"><strong>Yahoo Finance</strong><small>Live/delayed feed · NSE</small></div>
       </div>
     </aside>
 
     <main class="main">
       <header class="topbar">
         <div class="top-left">
-          <button class="menu-btn" id="menuBtn">☰</button>
+          <button class="menu-btn sidebar-toggle" id="sidebarToggle" title="Toggle sidebar" aria-label="Toggle sidebar" aria-expanded="true">☰</button>
           <div><h1 id="pageTitle">Overview</h1><p id="pageSub">Your trading command center</p></div>
         </div>
         <div class="top-actions">
@@ -63,6 +66,6 @@
   </div>
 
   <div class="toast" id="toast"></div>
-  <script src="/static/js/app.js?v=targets-4"></script>
+  <script src="/static/js/app.js?v=layout-1"></script>
 </body>
 </html>

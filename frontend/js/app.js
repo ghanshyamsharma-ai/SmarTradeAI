@@ -11,7 +11,8 @@ const state = {
   watchlist: [], indices: [], symbols: [], signals: [], positions: null,
   trades: null, strategies: [], alerts: null, settings: null, catalog: null, connected: false,
   targets: [], targetsMeta: null, targetFailures: [], targetGroup: 'all',
-  targetSort: 'confidence', targetQuery: '', targetLoading: false, targetProgress: ''
+  targetSort: 'confidence', targetQuery: '', targetLoading: false, targetProgress: '',
+  brief: null, briefStatus: null, briefLoading: false, briefError: ''
 };
 
 const $ = (s) => document.querySelector(s);
@@ -393,6 +394,62 @@ function renderAI() {
     </div>`;
 }
 
+function renderBrief() {
+  const s = state.briefStatus || {};
+  const b = state.brief;
+  const e = b?.evidence || {};
+  const rf = e.random_forest || {};
+  const mom = e.momentum || {};
+  const lv = e.atr_derived_levels || {};
+  const n = b?.narrative || {};
+  const connected = !!s.configured;
+  const fallback = !!(b?.meta?.fallback);
+  const fallbackReason = esc(b?.meta?.fallback_reason || '');
+  const fallbackBanner = fallback ? `<div class="empty" style="color:#fbbf24;border:1px solid #f59e0b55;border-radius:8px;margin-bottom:14px">OpenAI unavailable (${fallbackReason || 'no quota'}) — showing a clearly labelled local summary built from the same live evidence.</div>` : '';
+
+  const evidenceCard = b ? `<div class="card" style="margin-top:16px">
+    <div class="section-title">LIVE EVIDENCE USED FOR BRIEF <small>${esc(b.interval_used)} · ${esc(e.data_source || '')}</small></div>
+    <div class="grid g4" style="gap:10px;margin-bottom:14px">
+      ${kpi('Last traded price', money(e.last_price), `${signStr(e.change_pct)}% · ${esc(e.market_time_ist || '—')}`, signCls(e.change_pct))}
+      ${kpi('Terminal signal', esc(e.terminal_signal), `confidence ${e.terminal_confidence_pct}%`, e.terminal_signal === 'BUY' ? 'pos' : e.terminal_signal === 'SELL' ? 'neg' : '')}
+      ${kpi('RandomForest', esc(rf.bias), `${rf.confidence_pct}% · out-of-sample ${rf.out_of_sample_accuracy_pct}%`)}
+      ${kpi('ATR levels', `${money(lv.target)} / ${money(lv.stoploss)}`, `entry ${money(lv.entry)} · R:R 1:${lv.risk_reward}`)}
+    </div>
+    <div class="grid g2" style="gap:10px">
+      <div><div class="kpi-label">Momentum</div><p class="sub" style="margin-top:6px">Score ${esc(mom.score)} · side ${esc(mom.side)} · EMA20 ${money(mom.ema20)} · EMA50 ${money(mom.ema50)} · RSI ${mom.rsi_value ?? '—'}</p>
+        <p class="sub" style="margin-top:6px">${(mom.notes || []).map(x => esc(x)).join(' · ')}</p></div>
+      <div><div class="kpi-label">Levels &amp; horizon</div><p class="sub" style="margin-top:6px">Watch zone ${money(lv.watch_zone_low)}–${money(lv.watch_zone_high)} · ${esc(e.horizon)}</p>
+        <p class="sub" style="margin-top:6px">${e.reference_only ? 'Reference only — no actionable signal.' : 'Signal met the terminal confidence rules.'}${e.stale ? ' Yahoo candle is stale.' : ''}</p></div>
+    </div>
+    <p class="note" style="margin-top:14px">${esc(e.delay_note || '')} · ${esc(b.meta?.source || '')}</p>
+  </div>` : '';
+
+  const narrativeCard = b ? `<div class="card" style="margin-top:16px">
+    <div class="section-title">${fallback ? 'LIVE EVIDENCE BRIEF (LOCAL)' : 'OPENAI MARKET BRIEF'} <small>${esc(b.meta?.provider || '')} · ${esc(b.meta?.generated_at || '')} · cache ${esc(b.meta?.cache || '')}</small></div>
+    <p style="line-height:1.75;color:#c3ccdd">${esc(n.summary || '')}</p>
+    <div class="grid g3" style="gap:12px;margin-top:16px">
+      <div><span class="chip indigo">OBSERVATIONS</span>${(n.observations || []).map(x => `<div class="point">${esc(x)}</div>`).join('') || '<p class="sub">—</p>'}</div>
+      <div><span class="chip amber">RISKS</span>${(n.risks || []).map(x => `<div class="point">${esc(x)}</div>`).join('') || '<p class="sub">—</p>'}</div>
+      <div><span class="chip green">RE-CHECK</span>${(n.watch_conditions || []).map(x => `<div class="point">${esc(x)}</div>`).join('') || '<p class="sub">—</p>'}</div>
+    </div>
+    <p class="note" style="margin-top:16px">${esc(b.disclaimer || '')}</p>
+  </div>` : '';
+
+  return `<div class="input-row" style="flex-wrap:wrap">
+      <select id="briefSymbol">${catalogOptions(state.symbol)}</select>
+      <select id="briefInterval">${['5m', '1d'].map(i => `<option ${i === state.interval ? 'selected' : ''}>${i}</option>`).join('')}</select>
+      <button class="btn primary" id="briefRun" ${state.briefLoading ? 'disabled' : ''}>${state.briefLoading ? '✧ Writing…' : '✧ Generate brief'}</button>
+    </div>
+    <div style="margin-bottom:14px"><span class="chip ${connected && !fallback ? 'green' : 'amber'}">${fallback ? 'LOCAL EVIDENCE MODE' : connected ? 'OPENAI CONNECTED' : 'LOCAL MODE · NO OPENAI KEY'}</span>
+      <span class="sub" style="margin-left:10px">${fallback ? `OpenAI unavailable: ${fallbackReason || 'no quota'}. Local mode is active.` : connected ? `Model ${esc(s.model || '')}` : 'Add OPENAI_API_KEY to the server .env and restart to enable OpenAI text.'}</span></div>
+    ${state.briefError ? `<div class="empty" style="color:#fca5a5;border:1px solid #ef444455;border-radius:8px">${esc(state.briefError)}</div>` : ''}
+    ${state.briefLoading ? '<div class="loading">Fetching live Yahoo data and writing the grounded brief…</div>' : ''}
+    ${fallbackBanner}${narrativeCard}${evidenceCard}
+    <div class="card" style="margin-top:16px"><div class="section-title">How this works</div>
+      <p class="note">OpenAI writes the narrative when the key has quota. If OpenAI is missing, exhausted or failing, the same compact JSON of real Yahoo OHLCV-derived levels, genuine RandomForest output and terminal momentum notes is summarised locally and clearly labelled as a fallback. Failed symbols are never estimated. This is research text only — no buy/sell order is placed and no outcome is guaranteed. ${esc(s.note || '')}</p>
+    </div>`;
+}
+
 function targetRow(r) {
   const sideClass = r.signal === 'BUY' ? 'buy' : r.signal === 'SELL' ? 'sell' : 'wait';
   return `<tr data-targetsymbol="${esc(r.symbol)}" style="cursor:pointer">
@@ -518,6 +575,26 @@ async function loadTargets(force = false) {
   }
 }
 
+async function generateBrief(force = false) {
+  if (state.briefLoading) return;
+  state.briefLoading = true;
+  state.briefError = '';
+  if (state.view === 'brief') $('#view').innerHTML = renderBrief();
+  try {
+    state.brief = await api('/api/ai/brief', {
+      method: 'POST',
+      body: JSON.stringify({ symbol: state.symbol, interval: state.interval, refresh: force })
+    });
+  } catch (err) {
+    state.brief = null;
+    state.briefError = err.message;
+    toast(`Brief failed: ${err.message}`);
+  } finally {
+    state.briefLoading = false;
+    if (state.view === 'brief') $('#view').innerHTML = renderBrief();
+  }
+}
+
 function renderAlerts() {
   const list = state.alerts?.alerts || [];
   return `<div class="card"><div class="section-title">Live Scanner Alerts <small><button class="btn" id="readAlerts">Mark all as read</button></small></div>
@@ -578,13 +655,14 @@ const TITLES = {
   overview: ['Overview', 'Live market command center'], markets: ['Markets', 'Real-time Yahoo charts and watchlist'],
   signals: ['Signals', 'ML-filtered trade setups'], positions: ['Positions', 'Broker holdings and order history'],
   strategies: ['Strategies', 'Trading models'], ai: ['AI Insights', 'Machine-learning market analysis'],
+  brief: ['AI Market Brief', 'Grounded research from live Yahoo data · OpenAI when available'],
   targets: ['Target & Stoploss', 'AI + momentum levels for every bank, company and index'],
   alerts: ['Alerts', 'Scanner notifications'], tradingview: ['TradingView', 'Professional charts for NSE symbols'],
   settings: ['Settings', 'Live feed and risk configuration']
 };
 const RENDERERS = { overview: renderOverview, markets: renderMarkets, signals: renderSignals,
-  positions: renderPositions, strategies: renderStrategies, ai: renderAI, targets: renderTargets,
-  alerts: renderAlerts, tradingview: renderTradingView, settings: renderSettings };
+  positions: renderPositions, strategies: renderStrategies, ai: renderAI, brief: renderBrief,
+  targets: renderTargets, alerts: renderAlerts, tradingview: renderTradingView, settings: renderSettings };
 
 async function loadView() {
   $('#view').innerHTML = '<div class="loading">Loading…</div>';
@@ -614,6 +692,11 @@ async function loadView() {
         api(`/api/ai/model?interval=${state.interval}`)
       ]);
       state.analysis = a; state.model = m;
+    }
+    if (state.view === 'brief') {
+      if (!state.catalog) state.catalog = await api('/api/market/catalog');
+      state.briefStatus = await api('/api/ai/brief/status');
+      await generateBrief();
     }
     if (state.view === 'targets') {
       state.catalog = await api('/api/market/catalog');
@@ -701,11 +784,30 @@ document.addEventListener('click', async (e) => {
   }
   if (e.target.closest('#mktLoad')) { state.symbol = $('#mktSymbol').value; state.interval = $('#mktInterval').value; return loadView(); }
   if (e.target.closest('#aiRun')) { state.symbol = $('#aiSymbol').value; state.interval = $('#aiInterval').value; return loadView(); }
+  if (e.target.closest('#briefRun')) {
+    state.symbol = $('#briefSymbol').value; state.interval = $('#briefInterval').value;
+    return generateBrief(true);
+  }
   if (e.target.closest('#targetRefresh')) { loadTargets(true); return; }
   const tSym = e.target.closest('[data-targetsymbol]'); if (tSym) { state.symbol = tSym.dataset.targetsymbol; return navigate('markets'); }
   if (e.target.closest('#readAlerts')) { await api('/api/alerts/read', { method: 'POST' }); toast('Alerts marked as read'); return loadView(); }
   if (e.target.closest('#logoutBtn')) { localStorage.clear(); location.href = '/login'; return; }
-  if (e.target.closest('#menuBtn')) $('#sidebar').classList.toggle('open');
+  if (e.target.closest('#sidebarToggle') || e.target.closest('#menuBtn')) {
+    const mobile = window.matchMedia('(max-width: 760px)').matches;
+    if (mobile) {
+      $('#sidebar').classList.toggle('open');
+    } else {
+      document.querySelector('.app').classList.toggle('sidebar-collapsed');
+      const collapsed = document.querySelector('.app').classList.contains('sidebar-collapsed');
+      const btn = $('#sidebarToggle') || $('#menuBtn');
+      if (btn) btn.setAttribute('aria-expanded', collapsed ? 'false' : 'true');
+    }
+    return;
+  }
+  const sidebar = $('#sidebar');
+  if (sidebar && sidebar.classList.contains('open') && window.matchMedia('(max-width: 760px)').matches && !e.target.closest('#sidebar') && !e.target.closest('#sidebarToggle')) {
+    sidebar.classList.remove('open');
+  }
 });
 
 document.addEventListener('change', (e) => {

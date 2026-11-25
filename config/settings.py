@@ -52,6 +52,8 @@ class Settings(BaseSettings):
     KITE_API_KEY: str = ""
     KITE_API_SECRET: str = ""
     OPENAI_API_KEY: str = ""
+    OPENAI_MODEL: str = "gpt-4o-mini"
+    OPENAI_BRIEF_TTL_SECONDS: int = 600
 
     # Risk guard: real order placement must be explicitly enabled by the operator
     TRADING_ENABLED: bool = False
@@ -84,6 +86,10 @@ class Settings(BaseSettings):
     @property
     def broker_configured(self) -> bool:
         return bool(self.KITE_API_KEY and self.KITE_API_SECRET)
+
+    @property
+    def openai_configured(self) -> bool:
+        return bool(self.OPENAI_API_KEY and self.OPENAI_API_KEY.strip())
 
 
 settings = Settings()

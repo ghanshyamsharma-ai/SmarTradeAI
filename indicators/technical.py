@@ -118,8 +118,8 @@ def compute_all(candles: List[Dict[str, Any]]) -> Dict[str, List[Optional[float]
     return {
         "sma20": sma(closes, 20),
         "ema20": ema(closes, 20),
-        "ema50": ema(closes, 50) if len(closes) >= 50 else [None] * len(closes),
-        "rsi14": rsi(closes, 14),
+        "ema50": ema(closes, 50) if len(closes) >= 60 else [None] * len(closes),
+        "rsi14": rsi(closes, 5),
         "macd": macd_data["macd"],
         "macd_signal": macd_data["signal"],
         "macd_hist": macd_data["histogram"],

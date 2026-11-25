@@ -23,6 +23,7 @@ blue `AI`, green/red candlesticks on black.
 - **TradingView** — a dedicated INTELLIGENCE view with TradingView's advanced chart, the same 196-symbol verified catalog, quick symbol/interval switching, and an in-app full-screen chart button (`Esc` exits).
 - **Positions** — explicitly empty until a real broker session is configured; no fabricated P&L.
 - **AI Insights** — RandomForest model trained on live Yahoo history, with accuracy, baseline, precision and feature importance.
+- **AI Market Brief** — OpenAI narrative when quota is available, otherwise a clearly labelled local summary from the same live Yahoo data, RandomForest output and ATR levels; no invented numbers or order placement.
 - **Alerts & Settings** — alerts generated only from real scanned setups; no static demo notifications.
 - **Live feed** — backend poller broadcasts Yahoo ticks over `/ws/market` to authenticated clients.
 - **Platform status** — `GET /api/platform/status` reports the live state of every backend adapter.
@@ -146,6 +147,9 @@ Start from `.env.example`. Important variables:
 | `AZURE_STORAGE_CONNECTION_STRING`, `AZURE_CONTAINER` | Optional Azure Blob export target. |
 | `NODE_GATEWAY_URL`, `SPRING_STREAM_URL`, `DJANGO_ADMIN_URL` | Advertise enabled sidecars in platform status. |
 | `TRADING_ENABLED` | Safety switch for future real order placement. Currently no orders are placed. |
+| `OPENAI_API_KEY` | Optional: enables OpenAI text for **AI Market Brief**. Without it (or with no quota), a clearly labelled local evidence summary is used. Keep it out of Git. |
+| `OPENAI_MODEL` | Optional model override; defaults to `gpt-4o-mini`. |
+| `OPENAI_BRIEF_TTL_SECONDS` | Server-side cache TTL for identical briefs; defaults to 600 seconds. |
 
 The TradingView/Markets catalog is defined in `config/symbols.py` and served by
 `GET /api/market/catalog`. It is separate from the live Yahoo watchlist so the
@@ -201,6 +205,8 @@ GET  /api/broker/status
 GET  /api/strategies
 GET  /api/ai/analysis?symbol=INFY.NS
 GET  /api/ai/model?interval=5m
+GET  /api/ai/brief/status
+POST /api/ai/brief  (JSON: symbol, interval, refresh)
 GET  /api/ai/targets?group=indices&offset=0&limit=16
 GET  /api/alerts
 GET  /api/settings
@@ -216,6 +222,18 @@ come from ATR(14) on those same candles. Symbols Yahoo cannot serve at either
 interval are omitted and listed as failures — no estimates are substituted.
 Model accuracy, edge, training universe, caveats and Yahoo delay notes are
 returned in `meta` and shown in the UI. Stale candles are forced to watch-only.
+
+`POST /api/ai/brief` powers **AI Market Brief**. It sends a compact JSON of the
+same real evidence (live Yahoo price/change/market time, RandomForest bias and
+out-of-sample accuracy, EMA/RSI momentum notes, ATR-derived entry/target/stop)
+to OpenAI and returns a structured research narrative with observations, risks
+and conditions to re-check. The UI always shows the evidence next to the text.
+If the key is missing or OpenAI returns an error such as `credit_balance_exhausted`,
+the service does not fail: it builds a deterministic summary from that same evidence,
+labels the card **LOCAL EVIDENCE BRIEF (LOCAL)** and exposes `meta.fallback=true`
+with the reason. No prices are invented and no order is placed. Results are cached
+for `OPENAI_BRIEF_TTL_SECONDS`; pass `refresh: true` to retry OpenAI after adding
+credits. `GET /api/ai/brief/status` reports configuration without exposing the key.
 
 ## Cloud deployment
 
