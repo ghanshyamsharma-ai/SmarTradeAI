@@ -6,6 +6,23 @@
   --red: #ef4444; --amber: #f59e0b; --cyan: #38bdf8;
   --radius: 14px;
 }
+[data-theme="light"] {
+  --bg: #f5f7fb; --panel: #ffffff; --panel-2: #f0f4fa; --line: #d9e2ef;
+  --text: #172033; --muted: #5f6f85; --indigo: #4f46e5; --green: #16a34a;
+  --red: #dc2626; --amber: #d97706; --cyan: #0284c7;
+  color-scheme: light;
+}
+[data-theme="light"] body { background: var(--bg); color: var(--text); }
+[data-theme="light"] .sidebar { background: #ffffff; border-color: var(--line); }
+[data-theme="light"] .topbar { background: rgba(255,255,255,.92); border-color: var(--line); }
+[data-theme="light"] .card, [data-theme="light"] .login-card, [data-theme="light"] .profile-kpi, [data-theme="light"] .service-card, [data-theme="light"] .note-box { background: var(--panel); border-color: var(--line); color: var(--text); }
+[data-theme="light"] .search, [data-theme="light"] .btn, [data-theme="light"] .btn.ghost, [data-theme="light"] .field input, [data-theme="light"] .field textarea, [data-theme="light"] .field select, [data-theme="light"] .input-row input, [data-theme="light"] .input-row select, [data-theme="light"] .tv-chip, [data-theme="light"] .tv-symbol, [data-theme="light"] .tv-interval { background: #fff; color: var(--text); border-color: var(--line); }
+[data-theme="light"] .nav-item:hover, [data-theme="light"] .profile-side-nav button:hover { background: #eef2ff; color: var(--text); }
+[data-theme="light"] .nav-item.active, [data-theme="light"] .profile-side-nav button.active { background: #e8edff; color: #3730a3; }
+[data-theme="light"] .sub, [data-theme="light"] .note, [data-theme="light"] .kpi-label, [data-theme="light"] .kpi-foot, [data-theme="light"] .field-help, [data-theme="light"] .settings-row .meta span, [data-theme="light"] .activity-body p, [data-theme="light"] .activity-time, [data-theme="light"] .session-meta span, [data-theme="light"] .muted { color: var(--muted); }
+[data-theme="light"] .btn.primary { color: #fff; }
+[data-theme="light"] table th, [data-theme="light"] table td, [data-theme="light"] .settings-row, [data-theme="light"] .activity-item, [data-theme="light"] .session-item, [data-theme="light"] .divider { border-color: var(--line); }
+[data-theme="light"] .login-page { background: linear-gradient(180deg,#eef2ff,#f8fafc); }
 * { box-sizing: border-box; margin: 0; padding: 0; }
 html, body { height: 100%; }
 body { background: var(--bg); color: var(--text); font-family: Inter, system-ui, sans-serif; font-size: 14px; -webkit-font-smoothing: antialiased; overflow: hidden; }

@@ -875,7 +875,8 @@ function profileData(p) {
       <div class="form-grid">
         <div class="field"><label>Deactivate account (type DEACTIVATE)</label><input id="deactivateConfirm" placeholder="DEACTIVATE"><div class="form-actions" style="justify-content:flex-start"><button class="btn danger" id="deactivateBtn" type="button">Deactivate</button></div></div>
         <div class="field"><label>Delete account (type DELETE your-email)</label><input id="deleteConfirm" placeholder="DELETE ${esc(p.email||'email@example.com')}"><div class="form-actions" style="justify-content:flex-start"><button class="btn danger" id="deleteAccountBtn" type="button">Delete permanently</button></div></div>
-      </div></div>`;
+      </div></div>
+    <div class="card"><div class="section-title">Session</div><p class="muted" style="margin-bottom:12px">Sign out of this device.</p><button class="btn danger" id="logoutBtn" type="button">Logout</button></div>`;
 }
 
 
