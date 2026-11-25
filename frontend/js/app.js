@@ -671,7 +671,7 @@ function renderProfile() {
         <div class="profile-hero-avatar">${avatar}</div>
         <div><h3>${esc(p.name||'User')}</h3><p>@${esc(p.username||'user')}</p><div style="margin-top:8px">${verified} <span class="badge">${esc(p.membership_plan||'Free')}</span></div></div>
       </div>
-      <div class="profile-side-nav">${tabs.map(t=>profileTabBtn(t[0],t[1],t[2])).join('')}<button id="logoutBtn" class="profile-logout-nav" type="button"><span class="ico">⇥</span><span>Logout</span></button></div>
+      <div class="profile-side-nav">${tabs.map(t=>profileTabBtn(t[0],t[1],t[2])).join('')}<button id="logoutBtn" class="profile-logout-nav" type="button"><span class="ico">⏻</span><span>Logout</span></button></div>
     </aside>
     <section class="profile-main stack">${panel}</section>
   </div>`;
