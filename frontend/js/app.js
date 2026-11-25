@@ -647,6 +647,19 @@ function profileSaveBar(id, label='Save changes') {
 }
 function fmtDate(s) { if (!s) return '—'; const d = new Date(s); return isNaN(d) ? esc(s) : d.toLocaleString('en-IN', { dateStyle:'medium', timeStyle:'short' }); }
 function initials(name, email) { return ((name||email||'U').trim().slice(0,2).toUpperCase()); }
+function applyTheme(theme) {
+  const t = ['default','dark','black','light'].includes(theme) ? theme : 'default';
+  if (t === 'default') document.documentElement.removeAttribute('data-theme');
+  else document.documentElement.setAttribute('data-theme', t);
+  localStorage.setItem('stai_theme', t);
+}
+function applyAppPreferences(profile) {
+  const app = profile?.preferences?.app || {};
+  applyTheme(app.theme || localStorage.getItem('stai_theme') || 'default');
+  document.documentElement.style.fontSize = app.accessibility?.large_text ? '15px' : '';
+  document.body.classList.toggle('reduced-motion', !!app.accessibility?.reduced_motion);
+  document.body.classList.toggle('high-contrast', !!app.accessibility?.high_contrast);
+}
 
 function renderProfile() {
   const p = state.profile || {};
@@ -838,7 +851,7 @@ function profileActivity(p) {
 function profileAppPrefs(app) {
   return `<div class="card"><div class="section-title">App Preferences <small>Customize your workspace</small></div>
     <form id="appPrefsForm"><div class="form-grid">
-      <div class="field"><label>Theme</label><select name="theme"><option value="dark" ${app.theme==='dark'?'selected':''}>Dark</option><option value="light" ${app.theme==='light'?'selected':''}>Light (saved preference)</option></select></div>
+      <div class="field"><label>Theme</label><select name="theme">${[['default','Default'],['dark','Dark'],['black','Black Mode']].map(([v,l])=>{const cur=(app.theme==='light'?'default':(app.theme||'default')); return `<option value="${v}" ${cur===v?'selected':''}>${l}</option>`;}).join('')}</select></div>
       <div class="field"><label>Language</label><select name="language">${[['en','English'],['hi','Hindi']].map(([v,l])=>`<option value="${v}" ${app.language===v?'selected':''}>${l}</option>`).join('')}</select></div>
       <div class="field"><label>Currency</label><select name="currency">${['INR','USD'].map(x=>`<option ${app.currency===x?'selected':''}>${x}</option>`).join('')}</select></div>
       <div class="field"><label>Timezone</label><input name="timezone" value="${esc(app.timezone||'Asia/Kolkata')}"></div>
@@ -1246,7 +1259,7 @@ document.addEventListener('submit', async (e) => {
       date_format: String(fd.get('date_format')||'DD MMM YYYY'), dashboard_density: String(fd.get('dashboard_density')||'comfortable'),
       accessibility: collectToggles(f),
     };
-    try { await api('/api/profile/preferences', { method:'PUT', body: JSON.stringify({section:'app', preferences:prefs}) }); state.profile.preferences.app = prefs; toast('App preferences saved'); }
+    try { await api('/api/profile/preferences', { method:'PUT', body: JSON.stringify({section:'app', preferences:prefs}) }); state.profile.preferences.app = prefs; applyAppPreferences(state.profile); toast('App preferences saved'); }
     catch (err) { toast(err.message); }
   }
   if (f.id === 'serviceForm') {
@@ -1268,6 +1281,7 @@ document.addEventListener('submit', async (e) => {
 document.addEventListener('change', (e) => {
   if (e.target.matches('#targetGroup')) { state.targetGroup = e.target.value; loadTargets(); }
   if (e.target.matches('#targetSort')) { state.targetSort = e.target.value; renderTargets(); }
+  if (e.target.matches('#appPrefsForm select[name="theme"]')) { applyTheme(e.target.value); }
   if (e.target.matches('#avatarFile')) {
     const file = e.target.files?.[0]; if (!file) return;
     if (file.size > 1_500_000) { toast('Image too large (max 1.5MB)'); e.target.value=''; return; }
@@ -1307,5 +1321,7 @@ if (TOKEN) {
   setInterval(() => { $('#clock').textContent = new Date().toLocaleTimeString('en-IN', { hour12: false }); }, 1000);
   $('#clock').textContent = new Date().toLocaleTimeString('en-IN', { hour12: false });
   connectSocket();
+  applyTheme(localStorage.getItem('stai_theme') || 'default');
+  api('/api/profile').then(p => { state.profile = p; applyAppPreferences(p); const av=$('#avatarBtn'); if(av && (p?.name||p?.email)) av.textContent = initials(p.name,p.email); }).catch(()=>{});
   loadView();
 }
