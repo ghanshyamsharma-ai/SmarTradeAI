@@ -78,6 +78,7 @@ button { cursor: pointer; }
 .view { flex: 1 1 auto; min-height: 0; overflow-y: auto; overflow-x: hidden; padding: 24px 26px 50px; overscroll-behavior: contain; -webkit-overflow-scrolling: touch; touch-action: pan-y; }
 .loading { padding: 60px; text-align: center; color: var(--muted); }
 .grid { display: grid; gap: 16px; }
+.grid > * { min-width: 0; }
 .g4 { grid-template-columns: repeat(4, 1fr); }
 .g3 { grid-template-columns: repeat(3, 1fr); }
 .g2 { grid-template-columns: 2fr 1fr; }
@@ -85,12 +86,12 @@ button { cursor: pointer; }
 .section-title small { color: var(--muted); font-weight: 500; font-size: 11px; }
 
 /* Cards */
-.card { background: var(--panel); border: 1px solid var(--line); border-radius: var(--radius); padding: 18px; }
+.card { background: var(--panel); border: 1px solid var(--line); border-radius: var(--radius); padding: 18px; min-width: 0; max-width: 100%; }
 .kpi { position: relative; overflow: hidden; }
 .kpi::after { content: ''; position: absolute; right: -25px; top: -25px; width: 90px; height: 90px; border-radius: 50%; background: var(--indigo); opacity: .07; }
 .kpi-label { color: var(--muted); font-size: 11px; font-weight: 600; letter-spacing: .3px; text-transform: uppercase; }
-.kpi-value { font-size: 26px; font-weight: 800; letter-spacing: -1px; margin: 9px 0 6px; }
-.kpi-foot { font-size: 11px; color: var(--muted); }
+.kpi-value { font-size: 26px; font-weight: 800; letter-spacing: -1px; margin: 9px 0 6px; overflow-wrap: break-word; }
+.kpi-foot { font-size: 11px; color: var(--muted); overflow-wrap: break-word; }
 .pos { color: var(--green); } .neg { color: var(--red); }
 .chip { display: inline-block; padding: 3px 8px; border-radius: 6px; font-size: 10px; font-weight: 700; }
 .chip.green { background: #22c55e1c; color: #4ade80; }
@@ -151,7 +152,7 @@ td { padding: 11px 9px; border-bottom: 1px solid #1b2335; }
 tr:last-child td { border-bottom: 0; }
 tbody tr:hover { background: #151d2e; }
 .sym { font-weight: 700; } .sub { color: var(--muted); font-size: 10px; }
-.tbl-scroll { overflow-x: auto; }
+.tbl-scroll { overflow-x: auto; max-width: 100%; }
 
 /* Signals / strategy cards */
 .signal-row { display: flex; align-items: center; gap: 14px; padding: 13px 4px; border-bottom: 1px solid #1b2335; }
