@@ -404,3 +404,5 @@ tbody tr:hover { background: #151d2e; }
 .profile-side-nav .profile-logout-nav{color:#f87171;border-color:transparent;}
 .profile-side-nav .profile-logout-nav:hover{background:#ef44441a;color:#fca5a5;border-color:#ef444433;}
 .profile-side-nav .profile-logout-nav .ico{color:#f87171;}
+
+.profile-side-nav .profile-logout-nav .ico svg{display:block;margin:0 auto;}
