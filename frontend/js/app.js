@@ -1142,7 +1142,11 @@ document.addEventListener('click', async (e) => {
   const tSym = e.target.closest('[data-targetsymbol]'); if (tSym) { state.symbol = tSym.dataset.targetsymbol; return navigate('markets'); }
   if (e.target.closest('#readAlerts')) { await api('/api/alerts/read', { method: 'POST' }); toast('Alerts marked as read'); return loadView(); }
   if (e.target.closest('#logoutBtn')) { localStorage.clear(); location.href = '/login'; return; }
-  if (e.target.closest('#avatarBtn')) { return navigate('profile'); }
+  if (e.target.closest('#avatarBtn')) {
+    if (state.view === 'profile') return navigate(state.profileReturnView || 'overview');
+    state.profileReturnView = state.view;
+    return navigate('profile');
+  }
   if (e.target.closest('#sidebarToggle') || e.target.closest('#menuBtn')) {
     const mobile = window.matchMedia('(max-width: 760px)').matches;
     if (mobile) {
