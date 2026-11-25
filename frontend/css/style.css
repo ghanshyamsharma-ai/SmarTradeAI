@@ -400,3 +400,7 @@ tbody tr:hover { background: #151d2e; }
 @media (max-width: 900px) { .profile-layout { grid-template-columns: 1fr; } .profile-side { position: static; } .profile-side-nav { display:grid; grid-template-columns: repeat(2,minmax(0,1fr)); } }
 @media (max-width: 760px) { .form-grid,.service-grid { grid-template-columns: 1fr; } .profile-side-nav { grid-template-columns: 1fr; } .settings-row,.session-item { flex-direction:column; align-items:stretch; } .activity-time { white-space:normal; } }
 @media (max-width: 480px) { .profile-kpis { grid-template-columns: 1fr; } .profile-hero { align-items:flex-start; } }
+
+.profile-side-nav .profile-logout-nav{color:#f87171;border-color:transparent;}
+.profile-side-nav .profile-logout-nav:hover{background:#ef44441a;color:#fca5a5;border-color:#ef444433;}
+.profile-side-nav .profile-logout-nav .ico{color:#f87171;}

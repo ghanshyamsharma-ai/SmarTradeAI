@@ -671,7 +671,7 @@ function renderProfile() {
         <div class="profile-hero-avatar">${avatar}</div>
         <div><h3>${esc(p.name||'User')}</h3><p>@${esc(p.username||'user')}</p><div style="margin-top:8px">${verified} <span class="badge">${esc(p.membership_plan||'Free')}</span></div></div>
       </div>
-      <div class="profile-side-nav">${tabs.map(t=>profileTabBtn(t[0],t[1],t[2])).join('')}</div>
+      <div class="profile-side-nav">${tabs.map(t=>profileTabBtn(t[0],t[1],t[2])).join('')}<button id="logoutBtn" class="profile-logout-nav" type="button"><span class="ico">⇥</span><span>Logout</span></button></div>
     </aside>
     <section class="profile-main stack">${panel}</section>
   </div>`;
@@ -875,8 +875,7 @@ function profileData(p) {
       <div class="form-grid">
         <div class="field"><label>Deactivate account (type DEACTIVATE)</label><input id="deactivateConfirm" placeholder="DEACTIVATE"><div class="form-actions" style="justify-content:flex-start"><button class="btn danger" id="deactivateBtn" type="button">Deactivate</button></div></div>
         <div class="field"><label>Delete account (type DELETE your-email)</label><input id="deleteConfirm" placeholder="DELETE ${esc(p.email||'email@example.com')}"><div class="form-actions" style="justify-content:flex-start"><button class="btn danger" id="deleteAccountBtn" type="button">Delete permanently</button></div></div>
-      </div></div>
-    <div style="display:flex;justify-content:flex-start"><button class="btn danger" id="logoutBtn" type="button">Logout</button></div>`;
+      </div></div>`;
 }
 
 
