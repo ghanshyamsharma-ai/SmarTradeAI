@@ -78,7 +78,7 @@ def _sign_payload(payload: Dict[str, Any]) -> str:
     return f"{head}.{body}.{signature}"
 
 
-def create_token(user: Dict[str, Any], scopes: Optional[Any] = None) -> str:
+def create_token(user: Dict[str, Any], scopes: Optional[Any] = None, session_id: str = "") -> str:
     now = int(time.time())
     payload = {
         "sub": str(user["id"]),
@@ -88,6 +88,8 @@ def create_token(user: Dict[str, Any], scopes: Optional[Any] = None) -> str:
         "exp": now + TOKEN_TTL_SECONDS,
         "scope": " ".join(scopes or []),
     }
+    if session_id:
+        payload["sid"] = session_id
     return _sign_payload(payload)
 
 

@@ -4,7 +4,7 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>SmarTraderAI</title>
-  <link rel="stylesheet" href="/static/css/style.css?v=layout-5" />
+  <link rel="stylesheet" href="/static/css/style.css?v=layout-6" />
 </head>
 <body>
   <div class="app">
@@ -34,7 +34,7 @@
           <button class="nav-item" data-view="targets"><span class="ico">⌖</span><span class="nav-text">Target &amp; Stoploss</span></button>
           <button class="nav-item" data-view="alerts"><span class="ico">◔</span><span class="nav-text">Alerts</span><span class="nav-badge warn" id="navAlerts">0</span></button>
           <button class="nav-item" data-view="tradingview"><span class="ico">▥</span><span class="nav-text">TradingView</span></button>
-          <button class="nav-item" data-view="settings"><span class="ico">⋮</span><span class="nav-text">Settings</span></button>
+          <button class="nav-item" data-view="profile"><span class="ico">◉</span><span class="nav-text">Profile</span></button>
         </nav>
       </div>
 
@@ -55,7 +55,7 @@
           <div class="live-pill" id="livePill"><i></i><span>CONNECTING</span></div>
           <div class="clock" id="clock">--:--:--</div>
           <button class="btn primary" id="scanBtn">⟳ Run Scan</button>
-          <div class="user-box"><div class="avatar" id="avatar">--</div><button class="btn" id="logoutBtn" title="Log out">⇥</button></div>
+          <div class="user-box"><button class="avatar avatar-btn" id="avatarBtn" title="Profile">--</button><button class="btn" id="logoutBtn" title="Log out">⇥</button></div>
         </div>
       </header>
 
@@ -66,6 +66,6 @@
   </div>
 
   <div class="toast" id="toast"></div>
-  <script src="/static/js/app.js?v=layout-5"></script>
+  <script src="/static/js/app.js?v=layout-6"></script>
 </body>
 </html>

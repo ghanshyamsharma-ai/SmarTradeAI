@@ -12,7 +12,8 @@ const state = {
   trades: null, strategies: [], alerts: null, settings: null, catalog: null, connected: false,
   targets: [], targetsMeta: null, targetFailures: [], targetGroup: 'all',
   targetSort: 'confidence', targetQuery: '', targetLoading: false, targetProgress: '',
-  brief: null, briefStatus: null, briefLoading: false, briefError: ''
+  brief: null, briefStatus: null, briefLoading: false, briefError: '',
+  profile: null, profileTab: 'overview'
 };
 
 const $ = (s) => document.querySelector(s);
@@ -633,23 +634,250 @@ function renderTradingView() {
     </div>`;
 }
 
-function renderSettings() {
-  const s = state.settings || {};
-  return `<div class="grid g2"><div class="card"><div class="section-title">Application</div>
-    ${[['App', s.app_name], ['Version', s.version], ['Market', s.market], ['Data source', s.data_source],
-       ['Refresh interval', (s.refresh_seconds || '') + ' sec'], ['ML model', s.model]].map(([k, v]) =>
-       `<div style="display:flex;justify-content:space-between;padding:10px 0;border-bottom:1px solid #1b2335">
-       <span class="sub">${k}</span><strong style="text-align:right">${esc(v)}</strong></div>`).join('')}</div>
-    <div class="card"><div class="section-title">Watchlist & Risk</div>
-      <p class="note">${(s.watchlist || []).join(' · ')}</p>
-      <div style="margin-top:14px">${[['Minimum signal confidence', (s.signal_min_confidence || '') + '%'],
-        ['Broker', s.broker?.broker], ['Broker connected', s.broker?.connected ? 'Yes' : 'No'],
-        ['Automated orders', s.broker?.trading_enabled ? 'Enabled' : 'Disabled']].map(([k, v]) =>
-        `<div style="display:flex;justify-content:space-between;padding:10px 0;border-bottom:1px solid #1b2335">
-        <span class="sub">${k}</span><strong>${esc(v)}</strong></div>`).join('')}</div>
-      <p class="note" style="margin-top:16px">Credentials stay in <code>.env</code>. No order is placed without an explicitly configured and authorised broker session.</p>
-    </div></div>`;
+function profileTabBtn(id, icon, label) {
+  const active = state.profileTab === id ? 'active' : '';
+  return `<button class="${active}" data-profile-tab="${id}"><span class="ico">${icon}</span><span>${label}</span></button>`;
 }
+function profileToggle(key, on, label, desc) {
+  return `<div class="settings-row"><div class="meta"><strong>${esc(label)}</strong><span>${esc(desc)}</span></div>
+    <button class="toggle ${on ? 'on' : ''}" data-pref-toggle="${esc(key)}" data-pref-value="${on ? '1' : '0'}" type="button"></button></div>`;
+}
+function profileSaveBar(id, label='Save changes') {
+  return `<div class="form-actions"><button class="btn ghost" type="button" data-profile-reset="${id}">Cancel</button><button class="btn primary" type="submit">${label}</button></div>`;
+}
+function fmtDate(s) { if (!s) return '—'; const d = new Date(s); return isNaN(d) ? esc(s) : d.toLocaleString('en-IN', { dateStyle:'medium', timeStyle:'short' }); }
+function initials(name, email) { return ((name||email||'U').trim().slice(0,2).toUpperCase()); }
+
+function renderProfile() {
+  const p = state.profile || {};
+  const tab = state.profileTab || 'overview';
+  const prefs = p.preferences || {};
+  const trading = prefs.trading || {};
+  const ai = prefs.ai || {};
+  const app = prefs.app || {};
+  const notif = p.notifications || {};
+  const avatar = p.avatar_url ? `<img src="${esc(p.avatar_url)}" alt="avatar">` : esc(initials(p.name, p.email));
+  const verified = p.email_verified ? '<span class="badge ok">Verified</span>' : '<span class="badge warn">Unverified</span>';
+  const tabs = [
+    ['overview','◉','Overview'],['personal','✎','Personal Info'],['security','🔒','Security'],
+    ['trading','⌁','Trading Prefs'],['ai','✦','AI Personalization'],['notifications','◔','Notifications'],
+    ['billing','▤','Subscription'],['services','⇄','Connected Services'],['activity','◷','Activity'],
+    ['app','⚙','App Prefs'],['support','?','Help & Support'],['data','▣','Account Data'],
+  ];
+  const panel = renderProfilePanel(tab, p, trading, ai, app, notif);
+  return `<div class="profile-layout">
+    <aside class="card profile-side">
+      <div class="profile-hero">
+        <div class="profile-hero-avatar">${avatar}</div>
+        <div><h3>${esc(p.name||'User')}</h3><p>@${esc(p.username||'user')}</p><div style="margin-top:8px">${verified} <span class="badge">${esc(p.membership_plan||'Free')}</span></div></div>
+      </div>
+      <div class="profile-side-nav">${tabs.map(t=>profileTabBtn(t[0],t[1],t[2])).join('')}</div>
+    </aside>
+    <section class="profile-main stack">${panel}</section>
+  </div>`;
+}
+
+function renderProfilePanel(tab, p, trading, ai, app, notif) {
+  if (tab === 'overview') return profileOverview(p);
+  if (tab === 'personal') return profilePersonal(p);
+  if (tab === 'security') return profileSecurity(p);
+  if (tab === 'trading') return profileTrading(trading);
+  if (tab === 'ai') return profileAI(ai);
+  if (tab === 'notifications') return profileNotifications(notif);
+  if (tab === 'billing') return profileBilling(p);
+  if (tab === 'services') return profileServices(p);
+  if (tab === 'activity') return profileActivity(p);
+  if (tab === 'app') return profileAppPrefs(app);
+  if (tab === 'support') return profileSupport();
+  if (tab === 'data') return profileData(p);
+  return profileOverview(p);
+}
+
+function profileOverview(p) {
+  return `<div class="card"><div class="section-title">Profile Overview <small>Manage your SmarTraderAI account</small></div>
+    <div class="profile-kpis">
+      <div class="profile-kpi"><div class="label">User ID</div><div class="value">#${esc(p.id)}</div><div class="sub">Unique account</div></div>
+      <div class="profile-kpi"><div class="label">Membership</div><div class="value">${esc(p.membership_plan||'Free')}</div><div class="sub">${esc(p.membership_status||'Active')}</div></div>
+      <div class="profile-kpi"><div class="label">Email</div><div class="value" style="font-size:14px;word-break:break-word">${esc(p.email||'—')}</div><div class="sub">${p.email_verified?'Verified':'Verification pending'}</div></div>
+      <div class="profile-kpi"><div class="label">Member since</div><div class="value" style="font-size:14px">${esc((p.created_at||'').slice(0,10)||'—')}</div><div class="sub">Account created</div></div>
+    </div>
+    <div class="inline-actions"><button class="btn primary" data-profile-tab="personal">Edit Profile</button><button class="btn ghost" data-profile-tab="security">Security</button><button class="btn ghost" data-profile-tab="trading">Trading Preferences</button></div></div>
+    <div class="card"><div class="section-title">Quick Account Information</div>
+      <div class="settings-list">
+        ${[['Full name', p.name],['Username','@'+(p.username||'')],['Country',p.country||'Not set'],['Timezone',p.timezone||'Asia/Kolkata'],['Last updated',fmtDate(p.updated_at)]].map(([k,v])=>`<div class="settings-row"><div class="meta"><strong>${esc(k)}</strong><span>${esc(v||'—')}</span></div></div>`).join('')}
+      </div></div>`;
+}
+
+function profilePersonal(p) {
+  return `<div class="card"><div class="section-title">Personal Information <small>Update your account details</small></div>
+    <form id="profilePersonalForm">
+      <div class="form-grid">
+        <div class="field"><label>Full name</label><input name="name" value="${esc(p.name||'')}" required maxlength="80"></div>
+        <div class="field"><label>Username</label><input name="username" value="${esc(p.username||'')}" required maxlength="40"></div>
+        <div class="field"><label>Email address</label><input name="email" type="email" value="${esc(p.email||'')}" required></div>
+        <div class="field"><label>Mobile number</label><input name="mobile" value="${esc(p.mobile||'')}" maxlength="30" placeholder="+91 ..."></div>
+        <div class="field"><label>Country</label><input name="country" value="${esc(p.country||'')}" maxlength="80" placeholder="India"></div>
+        <div class="field"><label>Timezone</label><input name="timezone" value="${esc(p.timezone||'Asia/Kolkata')}" maxlength="80"></div>
+        <div class="field field-full"><label>Profile photo</label><input type="file" id="avatarFile" accept="image/*"><div class="field-help">Upload a small image (stored as profile avatar). Use Remove to clear it.</div>
+          <div class="inline-actions" style="margin-top:8px"><button class="btn ghost" type="button" id="removeAvatarBtn">Remove photo</button></div></div>
+        <div class="field field-full"><label>Bio / optional details</label><textarea name="bio" maxlength="300" placeholder="Optional short bio">${esc(p.bio||'')}</textarea></div>
+      </div>
+      ${profileSaveBar('personal')}
+    </form></div>`;
+}
+
+function profileSecurity(p) {
+  return `<div class="card"><div class="section-title">Security & Privacy <small>Protect your account</small></div>
+    <form id="passwordForm" class="stack" style="gap:14px">
+      <div class="form-grid">
+        <div class="field field-full"><label>Current password</label><input name="current_password" type="password" required></div>
+        <div class="field"><label>New password</label><input name="new_password" type="password" minlength="8" required></div>
+        <div class="field"><label>Confirm new password</label><input name="confirm_password" type="password" minlength="8" required></div>
+      </div>
+      <div class="form-actions"><button class="btn primary" type="submit">Change password</button></div>
+    </form>
+    <div class="divider"></div>
+    <div class="settings-list">
+      <div class="settings-row"><div class="meta"><strong>Two-factor authentication</strong><span>2FA enrollment is not configured on this server. You can still secure your account with a strong password, session management, and security alerts.</span></div><span class="badge muted">Not configured</span></div>
+      <div class="settings-row"><div class="meta"><strong>Login notifications</strong><span>Security alerts for sign-ins and account changes are controlled in Notifications.</span></div><button class="btn ghost" type="button" data-profile-tab="notifications">Open</button></div>
+    </div></div>
+    <div class="card"><div class="section-title">Active Sessions <small>Devices currently signed in</small></div>
+      <div id="sessionsList" class="muted">Loading sessions…</div>
+      <div class="form-actions"><button class="btn danger" type="button" id="logoutAllBtn">Logout from all other devices</button></div></div>
+    <div class="card"><div class="section-title">Login History <small>Recent account security events</small></div>
+      <div id="securityActivity" class="muted">Loading activity…</div></div>`;
+}
+
+function profileTrading(trading) {
+  const segs = ['Equity','Indices','F&O','Commodities','Currency'];
+  const indicators = ['EMA','RSI','MACD','Bollinger Bands','ATR','VWAP'];
+  const tfs = ['1m','5m','15m','1h','1d'];
+  return `<div class="card"><div class="section-title">Trading Preferences <small>Personalize your trading workspace</small></div>
+    <form id="tradingPrefsForm">
+      <div class="form-grid">
+        <div class="field"><label>Preferred exchange</label><select name="preferred_exchange">${['NSE','BSE'].map(x=>`<option ${trading.preferred_exchange===x?'selected':''}>${x}</option>`).join('')}</select></div>
+        <div class="field"><label>Default chart timeframe</label><select name="default_chart_timeframe">${tfs.map(x=>`<option ${trading.default_chart_timeframe===x?'selected':''}>${x}</option>`).join('')}</select></div>
+        <div class="field"><label>Default landing page</label><select name="default_landing_page">${['overview','markets','signals','positions','ai','profile'].map(x=>`<option value="${x}" ${trading.default_landing_page===x?'selected':''}>${x}</option>`).join('')}</select></div>
+        <div class="field"><label>Dashboard layout</label><select name="dashboard_layout">${['comfortable','compact'].map(x=>`<option ${trading.dashboard_layout===x?'selected':''}>${x}</option>`).join('')}</select></div>
+        <div class="field field-full"><label>Preferred market segments</label><div class="inline-actions">${segs.map(s=>`<label class="pill"><input type="checkbox" name="preferred_segments" value="${s}" ${(trading.preferred_segments||[]).includes(s)?'checked':''}> ${s}</label>`).join('')}</div></div>
+        <div class="field field-full"><label>Preferred indicators</label><div class="inline-actions">${indicators.map(s=>`<label class="pill"><input type="checkbox" name="preferred_indicators" value="${s}" ${(trading.preferred_indicators||[]).includes(s)?'checked':''}> ${s}</label>`).join('')}</div></div>
+        <div class="field field-full"><label>Default watchlist (comma separated symbols)</label><input name="default_watchlist" value="${esc((trading.default_watchlist||[]).join(', '))}"></div>
+        <div class="field field-full"><label>Favorite stocks (comma separated)</label><input name="favorite_stocks" value="${esc((trading.favorite_stocks||[]).join(', '))}"></div>
+      </div>
+      ${profileSaveBar('trading')}
+    </form></div>`;
+}
+
+function profileAI(ai) {
+  const patterns = ['Engulfing','Doji','Hammer','Shooting Star','Morning Star','Evening Star'];
+  return `<div class="card"><div class="section-title">AI Personalization Center <small>Customize AI insights without changing the underlying model</small></div>
+    <form id="aiPrefsForm">
+      <div class="form-grid">
+        <div class="field"><label>Analysis style</label><select name="analysis_style">${['conservative','balanced','aggressive'].map(x=>`<option ${ai.analysis_style===x?'selected':''}>${x}</option>`).join('')}</select></div>
+        <div class="field"><label>Insight depth</label><select name="insight_depth">${['brief','standard','detailed'].map(x=>`<option ${ai.insight_depth===x?'selected':''}>${x}</option>`).join('')}</select></div>
+        <div class="field"><label>EMA fast</label><input name="ema_fast" type="number" min="1" value="${esc(ai.ema_fast??20)}"></div>
+        <div class="field"><label>EMA slow</label><input name="ema_slow" type="number" min="1" value="${esc(ai.ema_slow??50)}"></div>
+        <div class="field"><label>RSI period</label><input name="rsi_period" type="number" min="1" value="${esc(ai.rsi_period??14)}"></div>
+        <div class="field"><label>MACD fast/slow/signal</label><div class="inline-actions"><input name="macd_fast" type="number" min="1" value="${esc(ai.macd_fast??12)}" style="width:90px"><input name="macd_slow" type="number" min="1" value="${esc(ai.macd_slow??26)}" style="width:90px"><input name="macd_signal" type="number" min="1" value="${esc(ai.macd_signal??9)}" style="width:90px"></div></div>
+        <div class="field field-full"><label>Candlestick pattern preferences</label><div class="inline-actions">${patterns.map(s=>`<label class="pill"><input type="checkbox" name="candlestick_patterns" value="${s}" ${(ai.candlestick_patterns||[]).includes(s)?'checked':''}> ${s}</label>`).join('')}</div></div>
+        <div class="field field-full"><label>Preferred indicators</label><div class="inline-actions">${['EMA','RSI','MACD','Bollinger Bands','ATR'].map(s=>`<label class="pill"><input type="checkbox" name="preferred_indicators" value="${s}" ${(ai.preferred_indicators||[]).includes(s)?'checked':''}> ${s}</label>`).join('')}</div></div>
+      </div>
+      <div class="settings-list" style="margin-top:14px">
+        ${profileToggle('ai_signal_notifications', !!ai.signal_notifications, 'AI signal notifications', 'Receive AI signal alerts in your notification preferences.')}
+        ${profileToggle('show_model_info', !!ai.show_model_info, 'Show model information', 'Display AI model details in insights panels.')}
+      </div>
+      ${profileSaveBar('ai')}
+    </form></div>
+    <div class="card"><div class="section-title">AI Model Information</div><div class="note-box">Model: <strong>RandomForest (genuine sklearn)</strong> for direction filtering, plus rule-based technical evidence and optional OpenAI brief when configured. Your preferences here personalize display/analysis preferences and do not automatically retrain or replace the underlying model.</div></div>`;
+}
+
+function profileNotifications(notif) {
+  const rows = [
+    ['email_notifications','Email notifications','Receive account and alert emails when email delivery is configured.'],
+    ['browser_push','Browser push notifications','Allow browser push alerts when supported by your browser.'],
+    ['price_alerts','Price alerts','Notify when watched price levels or moves trigger.'],
+    ['ai_signal_notifications','AI signal notifications','Notify when AI/ML signal setups are generated.'],
+    ['market_news_notifications','Market news notifications','Receive important market news updates.'],
+    ['watchlist_notifications','Watchlist notifications','Updates for symbols in your watchlist.'],
+    ['security_alerts','Security alerts','Login, password and security-related notifications.'],
+    ['risk_notifications','Risk notifications','Risk and exposure warnings.'],
+  ];
+  return `<div class="card"><div class="section-title">Notification Center <small>Control how SmarTraderAI contacts you</small></div>
+    <form id="notifPrefsForm"><div class="settings-list">${rows.map(r=>profileToggle(r[0], !!notif[r[0]], r[1], r[2])).join('')}</div>${profileSaveBar('notifications')}</form></div>`;
+}
+
+function profileBilling(p) {
+  return `<div class="card"><div class="section-title">Subscription & Billing <small>Current plan details</small></div>
+    <div class="profile-kpis" style="grid-template-columns:repeat(3,minmax(0,1fr))">
+      <div class="profile-kpi"><div class="label">Current plan</div><div class="value">${esc(p.membership_plan||'Free')}</div><div class="sub">${esc(p.membership_status||'Active')}</div></div>
+      <div class="profile-kpi"><div class="label">Billing cycle</div><div class="value" style="font-size:16px">Not configured</div><div class="sub">No fake billing data shown</div></div>
+      <div class="profile-kpi"><div class="label">Usage</div><div class="value" style="font-size:16px">Live terminal</div><div class="sub">Real account access</div></div>
+    </div>
+    <div class="note-box">This workspace currently shows only real account plan information. Payment/invoice history, upgrades, and renewals will appear when a billing provider is connected. No demo transactions are displayed.</div>
+    <div class="form-actions" style="justify-content:flex-start"><button class="btn ghost" type="button" disabled>Upgrade plan (billing not configured)</button></div></div>`;
+}
+
+function profileServices(p) {
+  return `<div class="card"><div class="section-title">Connected Services <small>Manage integrations securely</small></div>
+    <div id="servicesList" class="muted">Loading services…</div>
+    <div class="divider"></div>
+    <form id="serviceForm"><div class="form-grid">
+      <div class="field"><label>Service type</label><select name="service_type"><option value="market_data">Market data provider</option><option value="broker">Broker integration</option><option value="external_app">External application</option><option value="api">API integration</option></select></div>
+      <div class="field"><label>Service name</label><input name="name" required maxlength="80" placeholder="e.g. Broker API"></div>
+      <div class="field field-full"><label>Configuration note (non-secret)</label><input name="config_note" maxlength="120" placeholder="Optional label or endpoint note"></div>
+      <div class="field field-full"><label>API key / secret (optional)</label><input name="secret" type="password" maxlength="200" placeholder="Stored as hint only; raw secret is not persisted by this form"></div>
+    </div><div class="form-actions"><button class="btn primary" type="submit">Connect / Update</button></div></form>
+    <p class="field-help">For security, raw secrets are not stored in browser or profile DB by this endpoint. Configure production credentials in backend environment/secret manager.</p></div>`;
+}
+
+function profileActivity(p) {
+  return `<div class="card"><div class="section-title">Activity Timeline <small>Recent account events</small></div>
+    <div id="activityList" class="muted">Loading activity…</div></div>`;
+}
+
+function profileAppPrefs(app) {
+  return `<div class="card"><div class="section-title">App Preferences <small>Customize your workspace</small></div>
+    <form id="appPrefsForm"><div class="form-grid">
+      <div class="field"><label>Theme</label><select name="theme"><option value="dark" ${app.theme==='dark'?'selected':''}>Dark</option><option value="light" ${app.theme==='light'?'selected':''}>Light (saved preference)</option></select></div>
+      <div class="field"><label>Language</label><select name="language">${[['en','English'],['hi','Hindi']].map(([v,l])=>`<option value="${v}" ${app.language===v?'selected':''}>${l}</option>`).join('')}</select></div>
+      <div class="field"><label>Currency</label><select name="currency">${['INR','USD'].map(x=>`<option ${app.currency===x?'selected':''}>${x}</option>`).join('')}</select></div>
+      <div class="field"><label>Timezone</label><input name="timezone" value="${esc(app.timezone||'Asia/Kolkata')}"></div>
+      <div class="field"><label>Date format</label><select name="date_format">${['DD MMM YYYY','YYYY-MM-DD','DD/MM/YYYY'].map(x=>`<option ${app.date_format===x?'selected':''}>${x}</option>`).join('')}</select></div>
+      <div class="field"><label>Dashboard density</label><select name="dashboard_density">${['comfortable','compact'].map(x=>`<option ${app.dashboard_density===x?'selected':''}>${x}</option>`).join('')}</select></div>
+    </div>
+    <div class="settings-list" style="margin-top:14px">
+      ${profileToggle('reduced_motion', !!app.accessibility?.reduced_motion, 'Reduced motion', 'Minimize animations and transitions.')}
+      ${profileToggle('high_contrast', !!app.accessibility?.high_contrast, 'High contrast', 'Increase contrast for readability.')}
+      ${profileToggle('large_text', !!app.accessibility?.large_text, 'Large text', 'Use larger text in supported areas.')}
+    </div>
+    ${profileSaveBar('app')}
+    </form></div>`;
+}
+
+function profileSupport() {
+  return `<div class="card"><div class="section-title">Help & Support</div>
+    <div class="service-grid">
+      <div class="service-card"><h4>Help Center</h4><p>Guides for dashboard, signals, AI brief, and account settings.</p><button class="btn ghost" type="button" onclick="toast('Help Center: use README/docs and in-app sections for guidance.')">Open</button></div>
+      <div class="service-card"><h4>FAQs</h4><p>Common questions about live data, signals, and account management.</p><button class="btn ghost" type="button" onclick="toast('FAQ: Live data comes from Yahoo; signals are ML-filtered; credentials stay in .env.')">View</button></div>
+      <div class="service-card"><h4>Contact Support</h4><p>Report issues or request account assistance.</p><a class="btn ghost" href="mailto:support@smartraderai.local">Email support</a></div>
+      <div class="service-card"><h4>Report a Bug / Feedback</h4><p>Submit bugs or feature requests from your GitHub repository issues.</p><a class="btn ghost" href="https://github.com/ghanshyamsharma-ai/SmarTradeAI/issues" target="_blank" rel="noopener">Open GitHub Issues</a></div>
+    </div>
+    <div class="divider"></div><div class="note-box">Application version: <strong>${esc(state.settings?.version || state.dashboard?.version || 'v1')}</strong>. For sensitive account issues, include your User ID, not passwords or API keys.</div></div>`;
+}
+
+function profileData(p) {
+  return `<div class="card"><div class="section-title">Account Data Management <small>Export or manage your account</small></div>
+    <div class="settings-list">
+      <div class="settings-row"><div class="meta"><strong>Download personal data</strong><span>Export your profile, preferences, activity, sessions, and connected service metadata as JSON.</span></div><button class="btn ghost" id="exportDataBtn" type="button">Download</button></div>
+      <div class="settings-row"><div class="meta"><strong>Privacy policy / Terms</strong><span>Review how data is handled and the terms for using SmarTraderAI.</span></div><div class="inline-actions"><button class="btn ghost" type="button" onclick="toast('Privacy: profile data is stored in your account DB; secrets should be kept in backend env/secret manager.')">Privacy</button><button class="btn ghost" type="button" onclick="toast('Terms: SmarTraderAI provides market analytics; no guaranteed profits or automated trading without explicit broker authorization.')">Terms</button></div></div>
+    </div></div>
+    <div class="card danger-zone"><h4>Danger Zone</h4><p>Deactivation disables your account. Permanent deletion removes account/profile records. These actions require confirmation.</p>
+      <div class="form-grid">
+        <div class="field"><label>Deactivate account (type DEACTIVATE)</label><input id="deactivateConfirm" placeholder="DEACTIVATE"><div class="form-actions" style="justify-content:flex-start"><button class="btn danger" id="deactivateBtn" type="button">Deactivate</button></div></div>
+        <div class="field"><label>Delete account (type DELETE your-email)</label><input id="deleteConfirm" placeholder="DELETE ${esc(p.email||'email@example.com')}"><div class="form-actions" style="justify-content:flex-start"><button class="btn danger" id="deleteAccountBtn" type="button">Delete permanently</button></div></div>
+      </div></div>`;
+}
+
 
 const TITLES = {
   overview: ['Overview', 'Live market command center'], markets: ['Markets', 'Real-time Yahoo charts and watchlist'],
@@ -658,11 +886,11 @@ const TITLES = {
   brief: ['AI Market Brief', 'Grounded research from live Yahoo data · OpenAI when available'],
   targets: ['Target & Stoploss', 'AI + momentum levels for every bank, company and index'],
   alerts: ['Alerts', 'Scanner notifications'], tradingview: ['TradingView', 'Professional charts for NSE symbols'],
-  settings: ['Settings', 'Live feed and risk configuration']
+  profile: ['Profile', 'Account, security, preferences and personalization']
 };
 const RENDERERS = { overview: renderOverview, markets: renderMarkets, signals: renderSignals,
   positions: renderPositions, strategies: renderStrategies, ai: renderAI, brief: renderBrief,
-  targets: renderTargets, alerts: renderAlerts, tradingview: renderTradingView, settings: renderSettings };
+  targets: renderTargets, alerts: renderAlerts, tradingview: renderTradingView, profile: renderProfile };
 
 async function loadView() {
   $('#view').innerHTML = '<div class="loading">Loading…</div>';
@@ -710,9 +938,10 @@ async function loadView() {
       ]);
       state.watchlist = w.watchlist; state.indices = i.indices; state.catalog = cat;
     }
-    if (state.view === 'settings') state.settings = await api('/api/settings');
+    if (state.view === 'profile') state.profile = await api('/api/profile');
     $('#view').innerHTML = RENDERERS[state.view]();
     if (state.view === 'tradingview') mountTradingView();
+    if (state.view === 'profile') loadProfileExtras();
     updateBadges();
   } catch (e) { $('#view').innerHTML = `<div class="empty">Could not load: ${esc(e.message)}</div>`; }
 }
@@ -811,6 +1040,56 @@ function connectSocket() {
 document.addEventListener('click', async (e) => {
   const nav = e.target.closest('.nav-item'); if (nav) return navigate(nav.dataset.view);
   const go = e.target.closest('[data-go]'); if (go) return navigate(go.dataset.go);
+  const profileTab = e.target.closest('[data-profile-tab]');
+  if (profileTab) {
+    state.profileTab = profileTab.dataset.profileTab;
+    if (state.view !== 'profile') return navigate('profile');
+    $('#view').innerHTML = renderProfile();
+    loadProfileExtras();
+    return;
+  }
+  const prefToggle = e.target.closest('[data-pref-toggle]');
+  if (prefToggle) { prefToggle.classList.toggle('on'); prefToggle.dataset.prefValue = prefToggle.classList.contains('on') ? '1' : '0'; return; }
+  if (e.target.closest('#removeAvatarBtn')) {
+    try { state.profile = await api('/api/profile', { method:'PUT', body: JSON.stringify({avatar_url:''}) }); toast('Profile photo removed'); loadView(); } catch(err){ toast(err.message); }
+    return;
+  }
+  if (e.target.closest('#exportDataBtn')) {
+    try {
+      const res = await fetch('/api/profile/export', { headers: { 'Authorization': `Bearer ${TOKEN}` } });
+      if (!res.ok) throw new Error('Export failed');
+      const blob = await res.blob(); const url = URL.createObjectURL(blob);
+      const a = document.createElement('a'); a.href = url; a.download = 'smartraderai-profile-export.json'; a.click(); URL.revokeObjectURL(url);
+      toast('Profile data exported');
+    } catch(err){ toast(err.message); }
+    return;
+  }
+  if (e.target.closest('#logoutAllBtn')) {
+    try { const r = await api('/api/profile/sessions/revoke-all', { method:'POST' }); toast(`Revoked ${r.revoked} session(s)`); loadProfileExtras(); } catch(err){ toast(err.message); }
+    return;
+  }
+  const revoke = e.target.closest('[data-revoke-session]');
+  if (revoke) {
+    try { await api(`/api/profile/sessions/${encodeURIComponent(revoke.dataset.revokeSession)}/revoke`, { method:'POST' }); toast('Session revoked'); loadProfileExtras(); } catch(err){ toast(err.message); }
+    return;
+  }
+  const disc = e.target.closest('[data-disconnect-service]');
+  if (disc) {
+    try { await api(`/api/profile/services/${disc.dataset.disconnectService}`, { method:'DELETE' }); toast('Service removed'); loadProfileExtras(); } catch(err){ toast(err.message); }
+    return;
+  }
+  if (e.target.closest('#deactivateBtn')) {
+    const v = $('#deactivateConfirm')?.value?.trim();
+    if (v !== 'DEACTIVATE') return toast('Type DEACTIVATE to confirm');
+    try { await api('/api/profile/deactivate', { method:'POST', body: JSON.stringify({confirm:v}) }); toast('Account deactivated'); localStorage.clear(); location.href='/login'; } catch(err){ toast(err.message); }
+    return;
+  }
+  if (e.target.closest('#deleteAccountBtn')) {
+    const v = $('#deleteConfirm')?.value?.trim();
+    try { await api('/api/profile', { method:'DELETE', body: JSON.stringify({confirm:v}) }); toast('Account deleted'); localStorage.clear(); location.href='/login'; } catch(err){ toast(err.message); }
+    return;
+  }
+  const reset = e.target.closest('[data-profile-reset]'); if (reset) { loadView(); return; }
   const filter = e.target.closest('[data-filter]'); if (filter) { state.signalFilter = filter.dataset.filter; return renderSignals(); }
   const toggle = e.target.closest('[data-toggle]');
   if (toggle) {
@@ -844,6 +1123,7 @@ document.addEventListener('click', async (e) => {
   const tSym = e.target.closest('[data-targetsymbol]'); if (tSym) { state.symbol = tSym.dataset.targetsymbol; return navigate('markets'); }
   if (e.target.closest('#readAlerts')) { await api('/api/alerts/read', { method: 'POST' }); toast('Alerts marked as read'); return loadView(); }
   if (e.target.closest('#logoutBtn')) { localStorage.clear(); location.href = '/login'; return; }
+  if (e.target.closest('#avatarBtn')) { return navigate('profile'); }
   if (e.target.closest('#sidebarToggle') || e.target.closest('#menuBtn')) {
     const mobile = window.matchMedia('(max-width: 760px)').matches;
     if (mobile) {
@@ -862,9 +1142,144 @@ document.addEventListener('click', async (e) => {
   }
 });
 
+async function loadProfileExtras() {
+  if (state.view !== 'profile') return;
+  const tab = state.profileTab;
+  try {
+    if (tab === 'security') {
+      const [s, a] = await Promise.all([api('/api/profile/sessions'), api('/api/profile/activity?limit=20')]);
+      const sessEl = $('#sessionsList');
+      if (sessEl) sessEl.innerHTML = (s.sessions||[]).map(x => `<div class="session-item"><div class="session-meta"><strong>${esc(x.device||'Session')} ${x.is_current?'<span class="badge ok">Current</span>':''}</strong><span>${esc(x.ip_address||'—')} · ${esc((x.user_agent||'').slice(0,80))}</span><span>Last seen: ${fmtDate(x.last_seen_at)}${x.revoked_at?' · Revoked':''}</span></div><div class="inline-actions">${!x.revoked_at && !x.is_current?`<button class="btn ghost" data-revoke-session="${esc(x.session_id)}">Revoke</button>`:''}</div></div>`).join('') || '<div class="muted">No sessions found.</div>';
+      const actEl = $('#securityActivity');
+      const sec = (a.activity||[]).filter(x => ['security','account','profile','integration','settings'].includes(x.event_type)).slice(0,10);
+      if (actEl) actEl.innerHTML = sec.map(x => `<div class="activity-item"><div class="activity-dot ${esc(x.event_type)}"></div><div class="activity-body"><strong>${esc(x.label)}</strong><p>${esc(x.detail||x.event_type)}</p></div><div class="activity-time">${fmtDate(x.created_at)}</div></div>`).join('') || '<div class="muted">No security activity yet.</div>';
+    }
+    if (tab === 'activity') {
+      const a = await api('/api/profile/activity?limit=50');
+      const el = $('#activityList');
+      if (el) el.innerHTML = (a.activity||[]).map(x => `<div class="activity-item"><div class="activity-dot ${esc(x.event_type)}"></div><div class="activity-body"><strong>${esc(x.label)}</strong><p>${esc(x.detail||'')}${x.ip_address?` · IP ${esc(x.ip_address)}`:''}</p></div><div class="activity-time">${fmtDate(x.created_at)}</div></div>`).join('') || '<div class="muted">No activity recorded yet.</div>';
+    }
+    if (tab === 'services') {
+      const r = await api('/api/profile/services');
+      const el = $('#servicesList');
+      if (el) el.innerHTML = `<div class="service-grid">${(r.services||[]).map(s => `<div class="service-card"><div class="service-head"><div><h4>${esc(s.name)}</h4><span class="badge ${s.status==='connected'?'ok':'muted'}">${esc(s.status)}</span></div></div><p>${esc(s.service_type)} ${s.secret_hint?`· Secret ${esc(s.secret_hint)}`:''}</p><div class="inline-actions"><button class="btn danger" data-disconnect-service="${s.id}">Revoke</button></div></div>`).join('') || '<div class="note-box">No connected services yet. Add one below.</div>'}</div>`;
+    }
+  } catch (e) { console.warn('profile extras', e); }
+}
+
+function collectChecks(form, name) { return [...form.querySelectorAll(`input[name="${name}"]:checked`)].map(i=>i.value); }
+function collectToggles(container) {
+  const out = {};
+  container.querySelectorAll('[data-pref-toggle]').forEach(btn => { out[btn.dataset.prefToggle] = btn.classList.contains('on'); });
+  return out;
+}
+
+document.addEventListener('submit', async (e) => {
+  const f = e.target;
+  if (!(f instanceof HTMLFormElement)) return;
+  if (f.id === 'profilePersonalForm') {
+    e.preventDefault();
+    const fd = new FormData(f);
+    const payload = Object.fromEntries([...fd.entries()].map(([k,v])=>[k, String(v).trim()]));
+    delete payload.avatar; // file handled separately
+    try {
+      const p = await api('/api/profile', { method:'PUT', body: JSON.stringify(payload) });
+      state.profile = p; USER.name = p.name; USER.email = p.email; localStorage.setItem('stai_user', JSON.stringify(USER));
+      const av = $('#avatarBtn'); if (av) av.textContent = initials(p.name,p.email);
+      toast('Profile updated'); loadView();
+    } catch (err) { toast(err.message); }
+  }
+  if (f.id === 'passwordForm') {
+    e.preventDefault();
+    const fd = new FormData(f);
+    const cur = String(fd.get('current_password')||'');
+    const nw = String(fd.get('new_password')||'');
+    const cf = String(fd.get('confirm_password')||'');
+    if (nw !== cf) return toast('New passwords do not match');
+    try { await api('/api/profile/password', { method:'POST', body: JSON.stringify({current_password:cur, new_password:nw}) }); f.reset(); toast('Password changed'); }
+    catch (err) { toast(err.message); }
+  }
+  if (f.id === 'tradingPrefsForm') {
+    e.preventDefault();
+    const fd = new FormData(f);
+    const prefs = {
+      preferred_exchange: String(fd.get('preferred_exchange')||'NSE'),
+      default_chart_timeframe: String(fd.get('default_chart_timeframe')||'5m'),
+      default_landing_page: String(fd.get('default_landing_page')||'overview'),
+      dashboard_layout: String(fd.get('dashboard_layout')||'comfortable'),
+      preferred_segments: collectChecks(f,'preferred_segments'),
+      preferred_indicators: collectChecks(f,'preferred_indicators'),
+      default_watchlist: String(fd.get('default_watchlist')||'').split(',').map(s=>s.trim()).filter(Boolean),
+      favorite_stocks: String(fd.get('favorite_stocks')||'').split(',').map(s=>s.trim()).filter(Boolean),
+    };
+    try { await api('/api/profile/preferences', { method:'PUT', body: JSON.stringify({section:'trading', preferences:prefs}) }); state.profile.preferences.trading = prefs; toast('Trading preferences saved'); }
+    catch (err) { toast(err.message); }
+  }
+  if (f.id === 'aiPrefsForm') {
+    e.preventDefault();
+    const fd = new FormData(f);
+    const prefs = {
+      analysis_style: String(fd.get('analysis_style')||'balanced'),
+      insight_depth: String(fd.get('insight_depth')||'standard'),
+      ema_fast: Number(fd.get('ema_fast')||20), ema_slow: Number(fd.get('ema_slow')||50),
+      rsi_period: Number(fd.get('rsi_period')||14),
+      macd_fast: Number(fd.get('macd_fast')||12), macd_slow: Number(fd.get('macd_slow')||26), macd_signal: Number(fd.get('macd_signal')||9),
+      candlestick_patterns: collectChecks(f,'candlestick_patterns'),
+      preferred_indicators: collectChecks(f,'preferred_indicators'),
+      ...collectToggles(f),
+    };
+    try { await api('/api/profile/preferences', { method:'PUT', body: JSON.stringify({section:'ai', preferences:prefs}) }); state.profile.preferences.ai = prefs; toast('AI preferences saved'); }
+    catch (err) { toast(err.message); }
+  }
+  if (f.id === 'notifPrefsForm') {
+    e.preventDefault();
+    const prefs = collectToggles(f);
+    try { await api('/api/profile/notifications', { method:'PUT', body: JSON.stringify({preferences:prefs}) }); state.profile.notifications = prefs; toast('Notification preferences saved'); }
+    catch (err) { toast(err.message); }
+  }
+  if (f.id === 'appPrefsForm') {
+    e.preventDefault();
+    const fd = new FormData(f);
+    const prefs = {
+      theme: String(fd.get('theme')||'dark'), language: String(fd.get('language')||'en'),
+      currency: String(fd.get('currency')||'INR'), timezone: String(fd.get('timezone')||'Asia/Kolkata'),
+      date_format: String(fd.get('date_format')||'DD MMM YYYY'), dashboard_density: String(fd.get('dashboard_density')||'comfortable'),
+      accessibility: collectToggles(f),
+    };
+    try { await api('/api/profile/preferences', { method:'PUT', body: JSON.stringify({section:'app', preferences:prefs}) }); state.profile.preferences.app = prefs; toast('App preferences saved'); }
+    catch (err) { toast(err.message); }
+  }
+  if (f.id === 'serviceForm') {
+    e.preventDefault();
+    const fd = new FormData(f);
+    const payload = {
+      service_type: String(fd.get('service_type')||'api'),
+      name: String(fd.get('name')||'').trim(),
+      config: { note: String(fd.get('config_note')||'').trim() },
+      secret_hint: ''
+    };
+    const secret = String(fd.get('secret')||'').trim();
+    if (secret) payload.config.api_key = secret; // backend strips raw secret and stores hint only
+    try { await api('/api/profile/services', { method:'POST', body: JSON.stringify(payload) }); f.reset(); toast('Service saved'); loadProfileExtras(); }
+    catch (err) { toast(err.message); }
+  }
+});
+
 document.addEventListener('change', (e) => {
   if (e.target.matches('#targetGroup')) { state.targetGroup = e.target.value; loadTargets(); }
   if (e.target.matches('#targetSort')) { state.targetSort = e.target.value; renderTargets(); }
+  if (e.target.matches('#avatarFile')) {
+    const file = e.target.files?.[0]; if (!file) return;
+    if (file.size > 1_500_000) { toast('Image too large (max 1.5MB)'); e.target.value=''; return; }
+    const reader = new FileReader();
+    reader.onload = async () => {
+      try {
+        const p = await api('/api/profile', { method:'PUT', body: JSON.stringify({avatar_url:String(reader.result)}) });
+        state.profile = p; toast('Profile photo updated'); loadView();
+      } catch (err) { toast(err.message); }
+    };
+    reader.readAsDataURL(file);
+  }
 });
 
 document.addEventListener('input', (e) => {
@@ -887,7 +1302,8 @@ $('#globalSearch').addEventListener('keydown', (e) => {
 });
 
 if (TOKEN) {
-  $('#avatar').textContent = ((USER.name || USER.email || 'U').slice(0, 2).toUpperCase());
+  const avatarEl = $('#avatarBtn') || $('#avatar');
+  if (avatarEl) avatarEl.textContent = ((USER.name || USER.email || 'U').slice(0, 2).toUpperCase());
   setInterval(() => { $('#clock').textContent = new Date().toLocaleTimeString('en-IN', { hour12: false }); }, 1000);
   $('#clock').textContent = new Date().toLocaleTimeString('en-IN', { hour12: false });
   connectSocket();

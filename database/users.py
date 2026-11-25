@@ -86,3 +86,30 @@ def user_count() -> int:
     init_db()
     with _connect() as conn:
         return int(conn.execute("SELECT COUNT(*) FROM users").fetchone()[0])
+
+
+def update_password(user_id: int, current_password: str, new_password: str) -> bool:
+    init_db()
+    if len(new_password) < 8:
+        raise ValueError("Password must be at least 8 characters")
+    with _connect() as conn:
+        row = conn.execute("SELECT * FROM users WHERE id=?", (user_id,)).fetchone()
+        if not row or not verify_password(current_password, row["password_hash"]):
+            return False
+        conn.execute(
+            "UPDATE users SET password_hash=? WHERE id=?",
+            (hash_password(new_password), user_id),
+        )
+    return True
+
+
+def set_user_active(user_id: int, active: bool) -> None:
+    init_db()
+    with _connect() as conn:
+        conn.execute("UPDATE users SET is_active=? WHERE id=?", (1 if active else 0, user_id))
+
+
+def delete_user(user_id: int) -> None:
+    init_db()
+    with _connect() as conn:
+        conn.execute("DELETE FROM users WHERE id=?", (user_id,))

@@ -9,6 +9,7 @@ from fastapi.staticfiles import StaticFiles
 
 from api.auth import router as auth_router
 from api.oauth import router as oauth_router
+from api.profile import router as profile_router
 from api.routes import router as api_router
 from backend_platform import cache as platform_cache
 from backend_platform import events as platform_events
@@ -18,6 +19,7 @@ from config.settings import settings
 from core.logger import logger
 from core.security import decode_token
 from database.mongodb import close_mongodb_connection, connect_to_mongodb
+from database.profile import init_profile_db
 from database.users import init_db
 from services.market_data import get_feed
 from services.signal_engine import seed_if_empty
@@ -39,6 +41,7 @@ app.add_middleware(
 
 app.include_router(auth_router)
 app.include_router(oauth_router)
+app.include_router(profile_router)
 app.include_router(api_router)
 
 connections: set[WebSocket] = set()
@@ -86,6 +89,7 @@ async def _broadcast_ticks() -> None:
 async def startup() -> None:
     global _broadcaster_task
     init_db()
+    init_profile_db()
     for label, initializer in (
         ("MongoDB", connect_to_mongodb),
         ("Redis cache", platform_cache.get_cache),
