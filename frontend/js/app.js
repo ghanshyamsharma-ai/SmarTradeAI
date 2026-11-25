@@ -729,30 +729,82 @@ function navigate(view) {
   $('#sidebar').classList.remove('open'); loadView();
 }
 
+let pollTimer = null;
+let wsRetryTimer = null;
+
+function applyTicks(indices, watchlist) {
+  state.indices = indices || state.indices;
+  state.watchlist = watchlist || state.watchlist;
+  if (state.view === 'markets') {
+    const q = state.quote;
+    const fresh = (state.watchlist || []).find(x => x.symbol === q?.symbol);
+    if (fresh) { state.quote = fresh; $('#view').innerHTML = renderMarkets(); }
+  } else if (state.view === 'overview' && state.dashboard) {
+    state.dashboard.indices = state.indices;
+    state.dashboard.top_movers = [...(state.watchlist || [])].sort((a, b) => Math.abs(b.change_pct) - Math.abs(a.change_pct)).slice(0, 5);
+    $('#view').innerHTML = renderOverview();
+  }
+}
+
+async function pollTicks() {
+  try {
+    const [indicesRes, watchlistRes] = await Promise.all([api('/api/market/indices'), api('/api/market/watchlist')]);
+    const indices = Array.isArray(indicesRes) ? indicesRes : (indicesRes?.indices || []);
+    const watchlist = Array.isArray(watchlistRes) ? watchlistRes : (watchlistRes?.watchlist || []);
+    applyTicks(indices, watchlist);
+    const pill = $('#livePill');
+    if (pill) { pill.className = 'live-pill'; pill.querySelector('span').textContent = 'LIVE · YAHOO'; }
+  } catch (err) {
+    const pill = $('#livePill');
+    if (pill && !state.connected) { pill.className = 'live-pill off'; pill.querySelector('span').textContent = 'RECONNECTING'; }
+  }
+}
+
+function startPolling() {
+  if (pollTimer) return;
+  pollTicks();
+  pollTimer = setInterval(pollTicks, 12000);
+}
+
+function stopPolling() {
+  if (!pollTimer) return;
+  clearInterval(pollTimer);
+  pollTimer = null;
+}
+
 function connectSocket() {
   if (!TOKEN) return;
+  if (wsRetryTimer) { clearTimeout(wsRetryTimer); wsRetryTimer = null; }
   const proto = location.protocol === 'https:' ? 'wss' : 'ws';
-  // JWT travels as a WebSocket subprotocol, not in the URL/access logs.
-  const ws = new WebSocket(`${proto}://${location.host}/ws/market`, [TOKEN]);
   const pill = $('#livePill');
-  ws.onopen = () => { state.connected = true; pill.className = 'live-pill'; pill.querySelector('span').textContent = 'LIVE · YAHOO'; };
+  let ws;
+  try {
+    // JWT travels as a WebSocket subprotocol, not in the URL/access logs.
+    ws = new WebSocket(`${proto}://${location.host}/ws/market`, [TOKEN]);
+  } catch (err) {
+    startPolling();
+    wsRetryTimer = setTimeout(connectSocket, 15000);
+    return;
+  }
+  ws.onopen = () => {
+    state.connected = true;
+    stopPolling();
+    if (pill) { pill.className = 'live-pill'; pill.querySelector('span').textContent = 'LIVE · YAHOO'; }
+  };
   ws.onmessage = (ev) => {
-    const msg = JSON.parse(ev.data);
-    if (msg.type !== 'ticks') return;
-    state.indices = msg.indices; state.watchlist = msg.watchlist;
-    if (state.view === 'markets') {
-      const q = state.quote;
-      const fresh = msg.watchlist.find(x => x.symbol === q?.symbol);
-      if (fresh) { state.quote = fresh; $('#view').innerHTML = renderMarkets(); }
-    } else if (state.view === 'overview' && state.dashboard) {
-      state.dashboard.indices = msg.indices;
-      state.dashboard.top_movers = [...msg.watchlist].sort((a,b) => Math.abs(b.change_pct)-Math.abs(a.change_pct)).slice(0,5);
-      $('#view').innerHTML = renderOverview();
-    }
+    try {
+      const msg = JSON.parse(ev.data);
+      if (msg.type !== 'ticks') return;
+      applyTicks(msg.indices, msg.watchlist);
+    } catch {}
   };
   ws.onclose = () => {
-    state.connected = false; pill.className = 'live-pill off'; pill.querySelector('span').textContent = 'RECONNECTING';
-    setTimeout(connectSocket, 3000);
+    state.connected = false;
+    const wasPolling = !!pollTimer;
+    startPolling();
+    if (!wasPolling && pill) { pill.className = 'live-pill off'; pill.querySelector('span').textContent = 'RECONNECTING'; }
+    // Fallback for serverless deployments (e.g. Vercel) where WebSockets are unavailable.
+    wsRetryTimer = setTimeout(connectSocket, 15000);
   };
 }
 
