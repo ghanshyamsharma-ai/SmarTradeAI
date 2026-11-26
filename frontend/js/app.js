@@ -1011,7 +1011,7 @@ async function pollTicks() {
 function startPolling() {
   if (pollTimer) return;
   pollTicks();
-  pollTimer = setInterval(pollTicks, 1000);
+  pollTimer = setInterval(pollTicks, 3000);
 }
 
 function stopPolling() {
