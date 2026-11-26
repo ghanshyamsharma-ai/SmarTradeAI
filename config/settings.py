@@ -7,9 +7,9 @@ class Settings(BaseSettings):
 
     # Data source
     YAHOO_CHART_URL: str = "https://query1.finance.yahoo.com/v8/finance/chart"
-    MARKET_REFRESH_SECONDS: int = 15
+    MARKET_REFRESH_SECONDS: int = 1
     REQUEST_TIMEOUT_SECONDS: float = 10.0
-    CACHE_TTL_SECONDS: int = 15
+    CACHE_TTL_SECONDS: int = 1
     CANDLE_CACHE_TTL_SECONDS: int = 60
     WATCHLIST: str = (
         "RELIANCE.NS,TCS.NS,HDFCBANK.NS,ICICIBANK.NS,INFY.NS,SBIN.NS,"

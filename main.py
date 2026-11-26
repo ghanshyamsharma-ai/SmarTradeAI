@@ -62,7 +62,7 @@ async def _broadcast_ticks() -> None:
             # Optional platform adapters: cache, event stream, SQL history.
             cache_backend = await platform_cache.get_cache()
             await cache_backend.set(
-                "market:latest", payload, ttl=max(30, settings.MARKET_REFRESH_SECONDS * 2)
+                "market:latest", payload, ttl=max(5, settings.MARKET_REFRESH_SECONDS * 2)
             )
             await platform_events.publish("market.ticks", payload)
             for quote in watchlist:
