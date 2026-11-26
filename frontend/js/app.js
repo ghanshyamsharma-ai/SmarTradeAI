@@ -988,8 +988,15 @@ function applyTicks(indices, watchlist) {
     const fresh = (state.watchlist || []).find(x => x.symbol === q?.symbol);
     if (fresh) { state.quote = fresh; $('#view').innerHTML = renderMarkets(); }
   } else if (state.view === 'overview' && state.dashboard) {
+    const wl = state.watchlist || [];
+    const up = wl.filter(q => q.change_pct > 0).length;
+    const down = wl.filter(q => q.change_pct < 0).length;
+    const avg = wl.length ? wl.reduce((s, q) => s + (q.change_pct || 0), 0) / wl.length : 0;
     state.dashboard.indices = state.indices;
-    state.dashboard.top_movers = [...(state.watchlist || [])].sort((a, b) => Math.abs(b.change_pct) - Math.abs(a.change_pct)).slice(0, 5);
+    state.dashboard.top_movers = [...wl].sort((a, b) => Math.abs(b.change_pct) - Math.abs(a.change_pct)).slice(0, 5);
+    state.dashboard.gainers = [...wl].sort((a, b) => b.change_pct - a.change_pct).slice(0, 5);
+    state.dashboard.losers = [...wl].sort((a, b) => a.change_pct - b.change_pct).slice(0, 5);
+    state.dashboard.breadth = { advances: up, declines: down, unchanged: wl.length - up - down, average_change: Math.round(avg * 100) / 100 };
     $('#view').innerHTML = renderOverview();
   }
 }
