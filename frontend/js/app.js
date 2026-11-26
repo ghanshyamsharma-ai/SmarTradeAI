@@ -13,7 +13,8 @@ const state = {
   targets: [], targetsMeta: null, targetFailures: [], targetGroup: 'all',
   targetSort: 'confidence', targetQuery: '', targetLoading: false, targetProgress: '',
   brief: null, briefStatus: null, briefLoading: false, briefError: '',
-  profile: null, profileTab: 'overview'
+  profile: null, profileTab: 'overview',
+  viewLoading: false
 };
 
 const $ = (s) => document.querySelector(s);
@@ -912,10 +913,12 @@ const RENDERERS = { overview: renderOverview, markets: renderMarkets, signals: r
   targets: renderTargets, alerts: renderAlerts, tradingview: renderTradingView, profile: renderProfile };
 
 async function loadView() {
+  const view = state.view;
+  state.viewLoading = true;
   $('#view').innerHTML = '<div class="loading">Loading…</div>';
   try {
-    if (state.view === 'overview') state.dashboard = await api('/api/dashboard');
-    if (state.view === 'markets') {
+    if (view === 'overview') state.dashboard = await api('/api/dashboard');
+    if (view === 'markets') {
       const [q, c, a, w, i, cat] = await Promise.all([
         api(`/api/market/quote?symbol=${encodeURIComponent(state.symbol)}`),
         api(`/api/market/candles?symbol=${encodeURIComponent(state.symbol)}&interval=${state.interval}&limit=120`),
@@ -927,42 +930,47 @@ async function loadView() {
       state.quote = q; state.candles = c; state.analysis = a;
       state.watchlist = w.watchlist; state.indices = i.indices; state.catalog = cat;
     }
-    if (state.view === 'signals') { const d = await api('/api/signals'); state.signals = d.signals; }
-    if (state.view === 'positions') {
+    if (view === 'signals') { const d = await api('/api/signals'); state.signals = d.signals; }
+    if (view === 'positions') {
       const [p, t] = await Promise.all([api('/api/positions'), api('/api/trades')]);
       state.positions = p; state.trades = t;
     }
-    if (state.view === 'strategies') state.strategies = (await api('/api/strategies')).strategies;
-    if (state.view === 'ai') {
+    if (view === 'strategies') state.strategies = (await api('/api/strategies')).strategies;
+    if (view === 'ai') {
       const [a, m] = await Promise.all([
         api(`/api/ai/analysis?symbol=${state.symbol}&interval=${state.interval}`),
         api(`/api/ai/model?interval=${state.interval}`)
       ]);
       state.analysis = a; state.model = m;
     }
-    if (state.view === 'brief') {
+    if (view === 'brief') {
       if (!state.catalog) state.catalog = await api('/api/market/catalog');
       state.briefStatus = await api('/api/ai/brief/status');
       await generateBrief();
     }
-    if (state.view === 'targets') {
+    if (view === 'targets') {
       state.catalog = await api('/api/market/catalog');
       $('#view').innerHTML = renderTargets();
       await loadTargets();
     }
-    if (state.view === 'alerts') state.alerts = await api('/api/alerts');
-    if (state.view === 'tradingview') {
+    if (view === 'alerts') state.alerts = await api('/api/alerts');
+    if (view === 'tradingview') {
       const [w, i, cat] = await Promise.all([
         api('/api/market/watchlist'), api('/api/market/indices'), api('/api/market/catalog')
       ]);
       state.watchlist = w.watchlist; state.indices = i.indices; state.catalog = cat;
     }
-    if (state.view === 'profile') state.profile = await api('/api/profile');
-    $('#view').innerHTML = RENDERERS[state.view]();
-    if (state.view === 'tradingview') mountTradingView();
-    if (state.view === 'profile') loadProfileExtras();
+    if (view === 'profile') state.profile = await api('/api/profile');
+    if (state.view !== view) return;
+    $('#view').innerHTML = RENDERERS[view]();
+    if (view === 'tradingview') mountTradingView();
+    if (view === 'profile') loadProfileExtras();
     updateBadges();
-  } catch (e) { $('#view').innerHTML = `<div class="empty">Could not load: ${esc(e.message)}</div>`; }
+  } catch (e) {
+    if (state.view === view) $('#view').innerHTML = `<div class="empty">Could not load: ${esc(e.message)}</div>`;
+  } finally {
+    if (state.view === view) state.viewLoading = false;
+  }
 }
 
 function updateBadges() {
@@ -983,9 +991,10 @@ let wsRetryTimer = null;
 function applyTicks(indices, watchlist) {
   state.indices = indices || state.indices;
   state.watchlist = watchlist || state.watchlist;
+  if (state.viewLoading) return;
   if (state.view === 'markets') {
     const q = state.quote;
-    const fresh = (state.watchlist || []).find(x => x.symbol === q?.symbol);
+    const fresh = (state.watchlist || []).find(x => x.symbol === (q?.symbol || state.symbol));
     if (fresh) { state.quote = fresh; $('#view').innerHTML = renderMarkets(); }
   } else if (state.view === 'overview' && state.dashboard) {
     const wl = state.watchlist || [];
