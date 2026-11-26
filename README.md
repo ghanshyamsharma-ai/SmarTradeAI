@@ -136,6 +136,9 @@ Start from `.env.example`. Important variables:
 | `JWT_SECRET` | Secret used to sign user and service tokens. Change it in production. |
 | `WATCHLIST`, `INDICES` | Comma-separated Yahoo symbols. `TMPV.NS` replaced `TATAMOTORS.NS` after the 2025 demerger. |
 | `MARKET_REFRESH_SECONDS` | WebSocket broadcast interval. |
+| `MARKET_DATA_PROVIDER` | `yahoo` (default) or `fyers`. Fyers is a skeleton integration; complete `services/fyers_client.py` mapping before live use. |
+| `FYERS_APP_ID`, `FYERS_SECRET_ID`, `FYERS_ACCESS_TOKEN` | Optional Fyers credentials. Keep them in `.env` only; never commit secrets. |
+| `FYERS_REDIRECT_URI`, `FYERS_API_BASE` | Optional Fyers OAuth callback/base URL placeholders for the skeleton integration. |
 | `DATABASE_URL` | Optional PostgreSQL/MySQL/SQLite SQLAlchemy URL. |
 | `MONGO_URI` | Optional MongoDB connection. Missing or invalid values only disable persistence. |
 | `REDIS_URL` | Optional Redis cache. Falls back to memory. |

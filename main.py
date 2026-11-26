@@ -21,6 +21,7 @@ from core.security import decode_token
 from database.mongodb import close_mongodb_connection, connect_to_mongodb
 from database.profile import init_profile_db
 from database.users import init_db
+from services.fyers_client import fyers
 from services.market_data import get_feed
 from services.signal_engine import seed_if_empty
 from services.yahoo_client import yahoo
@@ -110,6 +111,7 @@ async def shutdown() -> None:
     if _broadcaster_task:
         _broadcaster_task.cancel()
     await yahoo.close()
+    await fyers.close()
     await close_mongodb_connection()
     await platform_cache.close_cache()
     await platform_events.close_bus()

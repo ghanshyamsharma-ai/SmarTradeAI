@@ -1,36 +1,48 @@
-"""Live market data facade backed by Yahoo Finance."""
+"""Live market data facade backed by the configured market data provider."""
 
 from typing import Any, Dict, List, Tuple
 
 from config.settings import settings
 from indicators.technical import compute_all
+from services.fyers_client import FyersError, fyers
 from services.yahoo_client import YahooError, yahoo
 
 
+def _provider():
+    provider = settings.market_data_provider
+    if provider == "fyers":
+        return fyers
+    return yahoo
+
+
+def _provider_error():
+    return FyersError if settings.market_data_provider == "fyers" else YahooError
+
+
 async def get_quote(symbol: str) -> Dict[str, Any]:
-    quotes = await yahoo.quotes([symbol])
+    quotes = await _provider().quotes([symbol])
     if not quotes:
-        raise YahooError(f"No quote available for {symbol}")
+        raise _provider_error()(f"No quote available for {symbol}")
     return quotes[0]
 
 
 async def get_candles(symbol: str, interval: str = "5m", limit: int = 120) -> Dict[str, Any]:
-    data = await yahoo.chart(symbol, interval, limit)
-    data["indicators"] = compute_all(data["candles"])
+    data = await _provider().chart(symbol, interval, limit)
+    data["indicators"] = compute_all(data.get("candles") or [])
     return data
 
 
 async def get_watchlist() -> List[Dict[str, Any]]:
-    return await yahoo.quotes(settings.watchlist)
+    return await _provider().quotes(settings.watchlist)
 
 
 async def get_indices() -> List[Dict[str, Any]]:
-    return await yahoo.quotes(settings.indices)
+    return await _provider().quotes(settings.indices)
 
 
 async def get_feed() -> Tuple[List[Dict[str, Any]], List[Dict[str, Any]]]:
-    """Return (indices, watchlist) using a single batch Yahoo request."""
-    all_quotes = await yahoo.quotes(settings.indices + settings.watchlist)
+    """Return (indices, watchlist) using a single batch provider request."""
+    all_quotes = await _provider().quotes(settings.indices + settings.watchlist)
     index_symbols = set(settings.indices)
     indices = [q for q in all_quotes if q["symbol"] in index_symbols]
     watchlist = [q for q in all_quotes if q["symbol"] not in index_symbols]

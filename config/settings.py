@@ -51,6 +51,15 @@ class Settings(BaseSettings):
     DATABASE_NAME: str = "smartraderai"
     KITE_API_KEY: str = ""
     KITE_API_SECRET: str = ""
+
+    # Market data provider: yahoo | fyers
+    MARKET_DATA_PROVIDER: str = "yahoo"
+    FYERS_APP_ID: str = ""
+    FYERS_SECRET_ID: str = ""
+    FYERS_ACCESS_TOKEN: str = ""
+    FYERS_REDIRECT_URI: str = "http://127.0.0.1:8000/api/broker/fyers/callback"
+    FYERS_API_BASE: str = "https://api-t1.fyers.in"
+
     OPENAI_API_KEY: str = ""
     OPENAI_MODEL: str = "gpt-4o-mini"
     OPENAI_BRIEF_TTL_SECONDS: int = 600
@@ -86,6 +95,14 @@ class Settings(BaseSettings):
     @property
     def broker_configured(self) -> bool:
         return bool(self.KITE_API_KEY and self.KITE_API_SECRET)
+
+    @property
+    def fyers_configured(self) -> bool:
+        return bool(self.FYERS_APP_ID and self.FYERS_ACCESS_TOKEN)
+
+    @property
+    def market_data_provider(self) -> str:
+        return (self.MARKET_DATA_PROVIDER or "yahoo").strip().lower()
 
     @property
     def openai_configured(self) -> bool:
